@@ -1,0 +1,19 @@
+[package]
+name = "anything-to-skill"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Turn books and documents into agent skills — one binary, every parser built in"
+license = "MIT"
+repository = "https://github.com/asale-ai/anything-to-skill"
+keywords = ["pdf", "epub", "extraction", "agent", "skill"]
+categories = ["command-line-utilities", "text-processing"]
+
+[dependencies]
+anydoc = "0.1.8"
+anyhow = "1.0.104"
+clap = { version = "4.6.6", features = ["derive"] }
+pdf-inspector = "0.1.8"
+regex = "1.13.1"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"

@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Format and lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --all-targets --all-features
+
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --all-features
+
+  smoke:
+    name: End-to-end smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      # poppler is optional at runtime, but the PDF table path and `render`
+      # only exercise fully when it is present — so CI installs it.
+      - name: Install poppler
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
+
+      - run: cargo build --release
+
+      - name: Extract a real PDF
+        run: |
+          set -euo pipefail
+          # A two-column paper with borderless tables — the shape that broke
+          # every single-strategy extractor we tested.
+          curl -fsSL --retry 3 -o paper.pdf https://arxiv.org/pdf/1706.03762v7
+          ./target/release/anything-to-skill extract paper.pdf --out ./work
+
+          # The extraction has to actually contain the document, not just exist.
+          test -s ./work/full_text.txt
+          grep -q "Attention Is All You Need" ./work/full_text.txt
+          # Reading order: this sentence spans a line break in the source, so it
+          # only appears intact when columns and hyphenation were handled.
+          grep -q "positional encodings" ./work/full_text.txt
+
+      - name: Report says what it did
+        run: |
+          set -euo pipefail
+          python3 - <<'EOF'
+          import json, sys
+          meta = json.load(open("./work/metadata.json"))
+          assert meta["estimated_tokens"] > 5000, meta["estimated_tokens"]
+          assert meta["files"], "no files in report"
+          assert meta["files"][0]["page_count"] == 15, meta["files"][0]["page_count"]
+          print("ok:", meta["estimated_tokens"], "tokens,",
+                meta["structure"]["chapters_detected"], "chapters")
+          EOF
+
+      - name: Subcommands run
+        run: |
+          set -euo pipefail
+          ./target/release/anything-to-skill check
+          ./target/release/anything-to-skill formats | grep -q epub
+          ./target/release/anything-to-skill render paper.pdf --pages 1 --out ./png
+          test -n "$(find ./png -name '*.png')"
+
+      - name: Unsupported input fails loudly
+        run: |
+          set -euo pipefail
+          touch empty.xyz
+          if ./target/release/anything-to-skill extract empty.xyz --out ./work2; then
+            echo "expected a non-zero exit for an unsupported format" >&2
+            exit 1
+          fi
