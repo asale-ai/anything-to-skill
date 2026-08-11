@@ -1,0 +1,9 @@
+# The published skill is SKILL.md and its licence — nothing else.
+#
+# This repository also holds the Rust CLI that SKILL.md drives, but that ships
+# as a binary through GitHub Releases, not inside the skill bundle. Publishing
+# the source here would put megabytes of Rust in front of every reader of the
+# skill page without helping any of them.
+*
+!SKILL.md
+!LICENSE
