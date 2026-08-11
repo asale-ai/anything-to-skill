@@ -45,4 +45,4 @@ PDFs come out better with [poppler](https://poppler.freedesktop.org/) installed
 
 ---
 
-[SKILL.md](SKILL.md) · [CONTRIBUTING.md](CONTRIBUTING.md) · [SECURITY.md](SECURITY.md) · MIT
+[SKILL.md](SKILL.md) · [CONTRIBUTING.md](CONTRIBUTING.md) · [SECURITY.md](SECURITY.md) · Apache-2.0

@@ -1,7 +1,7 @@
 ---
 name: anything-to-skill
 description: Convert a book, paper, or document into a structured, on-demand agent skill. Use when the user wants to turn a PDF, EPUB, DOCX, or similar source into a skill they can load later — "make a skill from this book", "turn this paper into a skill", "I want an agent that knows this manual".
-license: MIT
+license: Apache-2.0
 ---
 
 # Anything to Skill
