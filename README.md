@@ -16,6 +16,7 @@ The skill drives a small binary that does the reading:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/asale-ai/anything-to-skill/main/install.sh | sh
+# or, if you have Rust: cargo install anything-to-skill
 ```
 
 ## Use
