@@ -23,12 +23,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Native runner per target — the dependency tree has no C build
-          # scripts, so nothing here needs `cross` or a sysroot.
+          # Native runner per target where one exists — the dependency tree has
+          # no C build scripts, so nothing here needs `cross` or a sysroot.
           - target: aarch64-apple-darwin
             os: macos-latest
+          # Intel macOS cross-compiles from the ARM runner rather than using
+          # `macos-13`. GitHub is retiring the Intel runners and a job asking
+          # for one can sit queued indefinitely without ever starting — this
+          # release stalled for 20 minutes on exactly that. Apple ships a
+          # universal SDK, so with no C build scripts in the tree the
+          # cross-compile is as ordinary as a native build.
           - target: x86_64-apple-darwin
-            os: macos-13
+            os: macos-latest
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
           - target: x86_64-unknown-linux-musl
