@@ -4,11 +4,14 @@
 #   curl -fsSL https://raw.githubusercontent.com/asale-ai/anything-to-skill/main/install.sh | sh
 #
 # Options (environment variables):
-#   VERSION   tag to install, e.g. v0.2.0   (default: latest release)
-#   BIN_DIR   where to put the binary        (default: ~/.local/bin)
+#   VERSION   release to install, v0.2.0 or 0.2.0 (default: latest release)
+#   BIN_DIR   where to put the binary            (default: ~/.local/bin)
 #
 # The download is verified against the release's published SHA256 before it is
-# installed. If verification fails, nothing is written.
+# installed. Verification failing, the checksum file being unreachable, and no
+# SHA256 tool being available are all fatal — nothing is written in any of them.
+# Set INSECURE_SKIP_VERIFY=1 to install without the check anyway (unsafe: it
+# leaves you trusting the network).
 
 set -eu
 
@@ -23,20 +26,52 @@ need() {
     command -v "$1" >/dev/null 2>&1 || die "this installer needs '$1', which was not found"
 }
 
-need uname
-need mkdir
-need tar
+for tool in uname mkdir mktemp tar sed awk grep cp mv chmod rm; do
+    need "$tool"
+done
 
-# curl or wget, whichever is present.
+# curl or wget, whichever is present. Both are pinned to HTTPS across redirects:
+# a release download redirects to a separate asset host, and without this a
+# hijacked redirect could quietly drop the transfer down to plaintext HTTP.
 if command -v curl >/dev/null 2>&1; then
-    fetch() { curl -fsSL "$1" -o "$2"; }
-    fetch_stdout() { curl -fsSL "$1"; }
+    CURL_OPTS="-fsSL --proto =https --proto-redir =https --tlsv1.2 --retry 3"
+    # shellcheck disable=SC2086  # word splitting of the option list is intended
+    fetch() { curl $CURL_OPTS "$1" -o "$2"; }
+    # shellcheck disable=SC2086
+    fetch_stdout() { curl $CURL_OPTS "$1"; }
 elif command -v wget >/dev/null 2>&1; then
-    fetch() { wget -qO "$2" "$1"; }
-    fetch_stdout() { wget -qO- "$1"; }
+    # busybox wget has neither flag, so only pass them when they are understood.
+    WGET_OPTS="-q"
+    if wget --help 2>&1 | grep -q -- '--https-only'; then
+        WGET_OPTS="$WGET_OPTS --https-only --secure-protocol=TLSv1_2"
+    fi
+    # shellcheck disable=SC2086
+    fetch() { wget $WGET_OPTS -O "$2" "$1"; }
+    # shellcheck disable=SC2086
+    fetch_stdout() { wget $WGET_OPTS -O- "$1"; }
 else
     die "this installer needs curl or wget"
 fi
+
+# Print the SHA256 of a file, or return non-zero if no tool here produced one.
+# The result is checked for shape rather than trusted: piping through awk hides
+# the tool's own exit status, so a tool that is present but broken would
+# otherwise hand back an empty string that reads as a checksum mismatch.
+sha256_of() {
+    hash=""
+    if command -v sha256sum >/dev/null 2>&1; then
+        hash="$(sha256sum "$1" | awk '{print $1}')"
+    elif command -v shasum >/dev/null 2>&1; then
+        hash="$(shasum -a 256 "$1" | awk '{print $1}')"
+    elif command -v openssl >/dev/null 2>&1; then
+        hash="$(openssl dgst -sha256 "$1" | awk '{print $NF}')"
+    fi
+    [ ${#hash} -eq 64 ] || return 1
+    case "$hash" in
+        *[!0-9a-fA-F]*) return 1 ;;
+    esac
+    printf '%s\n' "$hash"
+}
 
 # ---------------------------------------------------------------- platform ---
 
@@ -73,6 +108,13 @@ if [ -z "$version" ]; then
         | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n 1)"
     [ -n "$version" ] || die "could not determine the latest release
 Set VERSION explicitly, e.g. VERSION=v0.1.0 sh install.sh"
+else
+    # Releases are tagged "vX.Y.Z" while the archives are named "X.Y.Z", so a
+    # bare VERSION=0.1.0 is the obvious thing to type. Accept both spellings.
+    case "$version" in
+        v*) ;;
+        *)  version="v$version" ;;
+    esac
 fi
 number="${version#v}"
 
@@ -82,36 +124,43 @@ url="https://github.com/$REPO/releases/download/${version}/${name}.tar.gz"
 # ---------------------------------------------------------------- download ---
 
 tmp="$(mktemp -d)"
-# shellcheck disable=SC2064  # expand $tmp now, not at trap time
-trap "rm -rf '$tmp'" EXIT INT TERM
+cleanup() { rm -rf "$tmp"; }
+trap cleanup EXIT
+# Without an explicit exit these signals would run the handler and then let the
+# script carry on against a temp directory that is no longer there.
+trap 'cleanup; exit 130' INT
+trap 'cleanup; exit 143' TERM
 
 say "Downloading $name ..."
 fetch "$url" "$tmp/$name.tar.gz" || die "download failed: $url
 Check that a release for $target exists at https://github.com/$REPO/releases"
 
-# Verify before unpacking. A failed check is fatal — never install unverified.
-if fetch "https://github.com/$REPO/releases/download/${version}/SHA256SUMS" "$tmp/SHA256SUMS" 2>/dev/null; then
-    expected="$(grep " ${name}.tar.gz\$" "$tmp/SHA256SUMS" | awk '{print $1}' | head -n 1)"
-    if [ -n "$expected" ]; then
-        if command -v sha256sum >/dev/null 2>&1; then
-            actual="$(sha256sum "$tmp/$name.tar.gz" | awk '{print $1}')"
-        elif command -v shasum >/dev/null 2>&1; then
-            actual="$(shasum -a 256 "$tmp/$name.tar.gz" | awk '{print $1}')"
-        else
-            actual=""
-            say "warning: no sha256 tool found — skipping checksum verification"
-        fi
-        if [ -n "$actual" ]; then
-            [ "$actual" = "$expected" ] || die "checksum mismatch — refusing to install
+# Verify before unpacking, so a tampered archive is never even extracted.
+if [ "${INSECURE_SKIP_VERIFY:-0}" = "1" ]; then
+    say "warning: INSECURE_SKIP_VERIFY=1 — installing without verifying the download"
+else
+    sums_url="https://github.com/$REPO/releases/download/${version}/SHA256SUMS"
+    fetch "$sums_url" "$tmp/SHA256SUMS" || die "could not download the checksums: $sums_url
+Refusing to install unverified. Retry, or set INSECURE_SKIP_VERIFY=1 to bypass."
+
+    # Escape the regex metacharacters in the filename (it contains dots) so the
+    # pattern matches literally rather than treating them as wildcards.
+    escaped="$(printf '%s' "${name}.tar.gz" | sed 's/[.[\*^$]/\\&/g')"
+    # Anchored, and the hash has to look like one. The trailing [[:space:]]* is
+    # for CR bytes, which the Windows half of the release build leaves behind.
+    expected="$(sed -n "s/^\([0-9a-fA-F]\{64\}\)  *${escaped}[[:space:]]*\$/\1/p" \
+        "$tmp/SHA256SUMS" | head -n 1)"
+    [ -n "$expected" ] || die "no checksum published for ${name}.tar.gz
+Refusing to install unverified. Set INSECURE_SKIP_VERIFY=1 to bypass."
+
+    actual="$(sha256_of "$tmp/$name.tar.gz")" || die "could not compute the download's SHA256
+Needs a working sha256sum, shasum, or openssl. Refusing to install unverified.
+Set INSECURE_SKIP_VERIFY=1 to bypass."
+
+    [ "$actual" = "$expected" ] || die "checksum mismatch — refusing to install
   expected $expected
   actual   $actual"
-            say "Checksum verified."
-        fi
-    else
-        say "warning: no checksum published for $name.tar.gz"
-    fi
-else
-    say "warning: SHA256SUMS not available for $version — skipping verification"
+    say "Checksum verified."
 fi
 
 # ----------------------------------------------------------------- install ---
@@ -119,12 +168,19 @@ fi
 tar -C "$tmp" -xzf "$tmp/$name.tar.gz"
 [ -f "$tmp/$name/$BIN" ] || die "archive did not contain $BIN"
 
-mkdir -p "$BIN_DIR"
-install -m 0755 "$tmp/$name/$BIN" "$BIN_DIR/$BIN" 2>/dev/null \
-    || { cp "$tmp/$name/$BIN" "$BIN_DIR/$BIN" && chmod 0755 "$BIN_DIR/$BIN"; }
+mkdir -p "$BIN_DIR" || die "could not create $BIN_DIR"
+
+# Stage next to the destination and rename over it. The rename is atomic, so an
+# interrupted install cannot leave a half-written binary, and replacing a copy
+# that is currently running works instead of failing with ETXTBSY.
+dest="$BIN_DIR/$BIN"
+staged="$dest.new.$$"
+cp "$tmp/$name/$BIN" "$staged" || die "could not write to $BIN_DIR — check permissions"
+chmod 0755 "$staged"
+mv -f "$staged" "$dest" || { rm -f "$staged"; die "could not install to $dest"; }
 
 say ""
-say "Installed $BIN $version to $BIN_DIR/$BIN"
+say "Installed $BIN $version to $dest"
 
 case ":$PATH:" in
     *":$BIN_DIR:"*) ;;
