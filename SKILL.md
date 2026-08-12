@@ -2,6 +2,7 @@
 name: anything-to-skill
 description: Convert a book, paper, or document into a structured, on-demand agent skill. Use when the user wants to turn a PDF, EPUB, DOCX, or similar source into a skill they can load later — "make a skill from this book", "turn this paper into a skill", "I want an agent that knows this manual".
 license: Apache-2.0
+compatibility: Needs the anything-to-skill CLI on PATH and a shell to run it, so it does not work in agents without command execution. poppler improves table fidelity and is required to render pages as images; Calibre is required only for Kindle formats.
 ---
 
 # Anything to Skill
@@ -169,7 +170,7 @@ Then write the skill:
 ```
 <skill-name>/
   SKILL.md          # what it is, when to use it, the core content
-  reference/        # tables, syntax, commands — anything looked up rather than read
+  references/       # tables, syntax, commands — anything looked up rather than read
 ```
 
 The generated `SKILL.md` needs YAML frontmatter with `name` and a `description`

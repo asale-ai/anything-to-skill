@@ -6,6 +6,8 @@
 # Options (environment variables):
 #   VERSION   release to install, v0.2.0 or 0.2.0 (default: latest release)
 #   BIN_DIR   where to put the binary            (default: ~/.local/bin)
+#   SKILL     1 to install the skill too         (default: 0, binary only)
+#   SKILL_DIR where to put the skill             (default: ~/.agents/skills)
 #
 # The download is verified against the release's published SHA256 before it is
 # installed. Verification failing, the checksum file being unreachable, and no
@@ -18,6 +20,7 @@ set -eu
 REPO="asale-ai/anything-to-skill"
 BIN="anything-to-skill"
 BIN_DIR="${BIN_DIR:-$HOME/.local/bin}"
+SKILL_DIR="${SKILL_DIR:-$HOME/.agents/skills}"
 
 say() { printf '%s\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
@@ -181,6 +184,49 @@ mv -f "$staged" "$dest" || { rm -f "$staged"; die "could not install to $dest"; 
 
 say ""
 say "Installed $BIN $version to $dest"
+
+# ------------------------------------------------------------------- skill ---
+
+# Off unless asked for. This script's job is the binary, and writing into an
+# agent's configuration is not a thing to do to someone who only asked for that.
+#
+# The skill goes to ~/.agents/skills/, the vendor-neutral path Codex, Cursor,
+# Gemini CLI, and opencode all read. Claude Code reads only ~/.claude/skills/,
+# so it gets a symlink to the same directory rather than a second copy that
+# would then have to be kept in step.
+#
+# Both files come out of the archive verified above, so nothing here is fetched
+# a second time or trusted unchecked. `npx skills add` does all of this and
+# covers many more agents; this path exists for machines without Node.
+if [ "${SKILL:-0}" = "1" ]; then
+    skill_dest="$SKILL_DIR/$BIN"
+
+    mkdir -p "$skill_dest" || die "could not create $skill_dest"
+    # Copied file by file rather than replacing the directory: anything else the
+    # user keeps in there is theirs, and an installer should not eat it.
+    cp "$tmp/$name/SKILL.md" "$skill_dest/SKILL.md" || die "could not write $skill_dest/SKILL.md"
+    cp "$tmp/$name/LICENSE" "$skill_dest/LICENSE"   || die "could not write $skill_dest/LICENSE"
+
+    say ""
+    say "Installed the skill to $skill_dest"
+
+    # Only for agents that are actually here — creating a configuration
+    # directory for a tool this machine does not have is litter, not support.
+    if [ -d "$HOME/.claude" ] && command -v ln >/dev/null 2>&1; then
+        link="$HOME/.claude/skills/$BIN"
+        if [ -e "$link" ] && [ ! -L "$link" ]; then
+            say "  $link already exists and is not a link — left alone"
+        else
+            # Not fatal: the skill is installed either way, and a filesystem
+            # without symlinks is a reason to tell the user, not to fail.
+            if mkdir -p "$HOME/.claude/skills" && rm -f "$link" && ln -s "$skill_dest" "$link"; then
+                say "  linked into ~/.claude/skills/ for Claude Code"
+            else
+                say "  could not link into ~/.claude/skills/ — copy $skill_dest there by hand"
+            fi
+        fi
+    fi
+fi
 
 case ":$PATH:" in
     *":$BIN_DIR:"*) ;;

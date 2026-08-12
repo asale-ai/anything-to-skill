@@ -8,9 +8,16 @@ opencode, and anything else that loads skills from a directory.
 
 ## Install
 
+The skill, into every agent tool on the machine:
+
 ```bash
-clawhub install @asale-ai/anything-to-skill
+npx skills add asale-ai/anything-to-skill --all -g
 ```
+
+That writes `~/.agents/skills/anything-to-skill/` — the path Codex, Cursor,
+Gemini CLI, and opencode read directly — and symlinks it into the ones that look
+elsewhere, Claude Code's `~/.claude/skills/` among them. Drop `-g` to install
+into the current project instead.
 
 The skill drives a small binary that does the reading:
 
@@ -18,6 +25,9 @@ The skill drives a small binary that does the reading:
 curl -fsSL https://raw.githubusercontent.com/asale-ai/anything-to-skill/main/install.sh | sh
 # or, if you have Rust: cargo install anything-to-skill
 ```
+
+No Node on the machine? Pipe that to `SKILL=1 sh` instead and the installer
+places the skill itself, out of the release archive it has already verified.
 
 ## Use
 
