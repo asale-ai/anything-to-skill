@@ -26,8 +26,20 @@ curl -fsSL https://raw.githubusercontent.com/asale-ai/anything-to-skill/main/ins
 # or, if you have Rust: cargo install anything-to-skill
 ```
 
-No Node on the machine? Pipe that to `SKILL=1 sh` instead and the installer
-places the skill itself, out of the release archive it has already verified.
+On Windows, in PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/asale-ai/anything-to-skill/main/install.ps1 | iex
+```
+
+No Node on the machine? Pipe to `SKILL=1 sh` instead — or set `$env:SKILL = '1'`
+before the PowerShell line — and the installer places the skill itself, out of
+the release archive it has already verified.
+
+Both installers verify the download against the release's published SHA256 and
+install nothing if it does not match. Set `BIN_DIR` (`$env:BIN_DIR`) to install
+somewhere other than `~/.local/bin`; `$env:ADD_TO_PATH = '1'` puts that
+directory on your PATH on Windows.
 
 ## Use
 

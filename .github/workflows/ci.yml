@@ -27,6 +27,21 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --all-targets --all-features
 
+      # The Windows installer is only ever run from a raw URL, where a syntax
+      # error is a broken install rather than a failed build. PowerShell is on
+      # the Ubuntu image, so the parse costs nothing.
+      - name: Windows installer parses
+        shell: pwsh
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path ./install.ps1).Path, [ref]$null, [ref]$errors) | Out-Null
+          if ($errors) {
+              $errors | ForEach-Object { Write-Host "$($_.Extent.StartLineNumber): $($_.Message)" }
+              exit 1
+          }
+          Write-Host "install.ps1 parses clean"
+
   test:
     name: Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

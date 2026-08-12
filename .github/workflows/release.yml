@@ -157,6 +157,12 @@ jobs:
             curl -fsSL https://raw.githubusercontent.com/asale-ai/anything-to-skill/main/install.sh | sh
             ```
 
+            Windows, in PowerShell:
+
+            ```powershell
+            irm https://raw.githubusercontent.com/asale-ai/anything-to-skill/main/install.ps1 | iex
+            ```
+
             Or download the archive for your platform below and put
             `anything-to-skill` on your `PATH`.
 

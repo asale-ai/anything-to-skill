@@ -85,7 +85,8 @@ case "$os" in
     Darwin) os_part="apple-darwin" ;;
     Linux)  os_part="unknown-linux" ;;
     *)      die "unsupported operating system: $os
-Windows users: download the .zip from https://github.com/$REPO/releases/latest" ;;
+Windows users: run this in PowerShell instead
+  irm https://raw.githubusercontent.com/$REPO/main/install.ps1 | iex" ;;
 esac
 
 case "$arch" in
