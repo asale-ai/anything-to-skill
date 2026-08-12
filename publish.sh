@@ -14,13 +14,16 @@
 #                (default: "Release vX.Y.Z")
 #   --dry-run    run every check and both dry-run publishes, but never commit,
 #                push, or publish for real
-#   --yes        skip the confirmation prompt before the irreversible half
 #   --no-wait    do not wait for the GitHub release build to produce binaries
 #   --skip-tests skip fmt/clippy/test (they already ran in CI, say)
 #
+# There is no confirmation prompt. Once the gates and both rehearsal publishes
+# pass, the release runs straight through to the end — so --dry-run is the only
+# way to see what a release would do without doing it.
+#
 # Uncommitted work in the tree is part of the release: it is committed together
 # with the version bump, so the tag covers exactly what was tested. Everything
-# staged for that commit is listed before you confirm.
+# going into that commit is listed as it happens.
 #
 # The release has four destinations and this script does them in dependency
 # order: the git tag drives the GitHub Actions build that produces the binaries
@@ -59,7 +62,6 @@ die()  { printf '%serror:%s %s\n' "$RED" "$RESET" "$*" >&2; exit 1; }
 LEVEL=""
 MESSAGE=""
 DRY_RUN=0
-ASSUME_YES=0
 WAIT_FOR_BUILD=1
 SKIP_TESTS=0
 
@@ -73,7 +75,9 @@ while [ $# -gt 0 ]; do
         -m*)          MESSAGE="${1#-m}" ;;
         --message=*)  MESSAGE="${1#--message=}" ;;
         --dry-run)    DRY_RUN=1 ;;
-        --yes|-y)     ASSUME_YES=1 ;;
+        # Kept as a no-op: it used to skip the confirmation prompt, and typing it
+        # out of habit should not abort a release.
+        --yes|-y)     ;;
         --no-wait)    WAIT_FOR_BUILD=0 ;;
         --skip-tests) SKIP_TESTS=1 ;;
         # The header comment is the help text: print it up to the blank line
@@ -136,8 +140,8 @@ git rev-parse --git-dir >/dev/null 2>&1 || die "not inside a git repository"
 branch="$(git rev-parse --abbrev-ref HEAD)"
 [ "$branch" = "$MAIN_BRANCH" ] || die "on branch '$branch', but releases are cut from '$MAIN_BRANCH'"
 
-# Uncommitted work is not an error — it ships with this release. It is shown
-# here and again in the confirmation, because `git add -A` later will sweep up
+# Uncommitted work is not an error — it ships with this release. It is listed
+# here and again just before the commit, because `git add -A` will sweep up
 # anything lying around that git is not already ignoring.
 pending="$(git status --porcelain)"
 if [ -n "$pending" ]; then
@@ -299,20 +303,19 @@ fi
 
 message="${MESSAGE:-Release $tag}"
 
-# Read the list without staging anything. Staging before the confirmation would
-# leave a loaded index behind on abort, and would quietly swallow whatever the
-# user had already staged for reasons of their own.
+# Only for the listing below — the staging itself happens at commit time. Doing
+# it here instead would leave a loaded index behind if any later step failed.
 changes="$(git status --porcelain | sed 's/^...//')"
 [ -n "$changes" ] || die "nothing to commit — the version bump produced no change"
 change_count="$(printf '%s\n' "$changes" | wc -l | tr -d ' ')"
 
-step "Ready to release $CRATE $version"
+step "Releasing $CRATE $version"
 cat <<EOF
     Commit message: ${BOLD}${message}${RESET}
     Files in the commit ($change_count):
 $(printf '%s\n' "$changes" | sed 's/^/      /')
 
-    This will, in order:
+    Now, in order:
       1. commit those $change_count file(s) and tag the commit $tag
       2. push $MAIN_BRANCH and $tag to origin
          (the tag starts the GitHub Actions build that produces the binaries
@@ -320,13 +323,6 @@ $(printf '%s\n' "$changes" | sed 's/^/      /')
       3. publish $CRATE $version to crates.io      ${DIM}— cannot be undone, only yanked${RESET}
       4. publish the skill to ClawHub as $SKILL_OWNER/$SKILL_SLUG@$version
 EOF
-
-if [ "$ASSUME_YES" != 1 ]; then
-    [ -t 0 ] || die "not attached to a terminal and --yes was not given; refusing to publish blind"
-    printf '\n    Type the version to confirm (%s): ' "$version"
-    read -r reply
-    [ "$reply" = "$version" ] || die "aborted — nothing was committed, pushed, or published"
-fi
 
 step "Committing and tagging"
 git add -A
