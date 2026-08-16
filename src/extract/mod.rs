@@ -3,12 +3,11 @@
 pub mod pdf;
 
 use crate::config::Route;
+use crate::source::{Doc, Payload};
 use anyhow::{Context, Result, bail};
-use regex::Regex;
 use serde::Serialize;
 use std::path::Path;
 use std::process::Command;
-use std::sync::LazyLock;
 
 /// What one file yielded, plus everything the agent needs to decide whether to
 /// trust it.
@@ -45,6 +44,14 @@ impl Extraction {
     }
 }
 
+/// Extract text from one document, whatever kind of source produced it.
+pub fn extract_doc(doc: &Doc) -> Result<Extraction> {
+    match &doc.payload {
+        Payload::File(path) => extract(path),
+        Payload::Text { text, method } => Ok(Extraction::plain(text.clone(), method)),
+    }
+}
+
 /// Extract text from one file, dispatching on its extension.
 pub fn extract(path: &Path) -> Result<Extraction> {
     let ext = path
@@ -68,7 +75,7 @@ pub fn extract(path: &Path) -> Result<Extraction> {
         }
         Route::Html => {
             let raw = read_text(path)?;
-            Ok(Extraction::plain(strip_html(&raw), "html-strip"))
+            Ok(Extraction::plain(crate::html::strip(&raw), "html-strip"))
         }
         Route::Anydoc => {
             let text = anydoc::to_markdown(path)
@@ -88,45 +95,6 @@ pub fn extract(path: &Path) -> Result<Extraction> {
 fn read_text(path: &Path) -> Result<String> {
     let bytes = std::fs::read(path).with_context(|| format!("reading {}", path.display()))?;
     Ok(String::from_utf8_lossy(&bytes).into_owned())
-}
-
-static SCRIPT_STYLE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?is)<(script|style)\b[^>]*>.*?</\s*(script|style)\s*>").unwrap()
-});
-static BLOCK_END: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)</\s*(p|div|section|article|li|tr|h[1-6]|blockquote|pre)\s*>|<\s*br\s*/?>")
-        .unwrap()
-});
-static TAG: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?s)<[^>]+>").unwrap());
-static BLANK_RUN: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\n{3,}").unwrap());
-
-/// Strip HTML to readable text.
-///
-/// Deliberately small: script/style contents are dropped, block-level closers
-/// become newlines so paragraphs survive, remaining tags are removed, and the
-/// handful of entities that actually appear in prose are decoded. Anything
-/// beyond that is the job of a real parser, and books rarely need one — an
-/// HTML book chapter is prose with markup, not an application.
-fn strip_html(raw: &str) -> String {
-    let no_scripts = SCRIPT_STYLE.replace_all(raw, " ");
-    let with_breaks = BLOCK_END.replace_all(&no_scripts, "\n");
-    let no_tags = TAG.replace_all(&with_breaks, "");
-    let decoded = no_tags
-        .replace("&nbsp;", " ")
-        .replace("&amp;", "&")
-        .replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&quot;", "\"")
-        .replace("&#39;", "'")
-        .replace("&apos;", "'")
-        .replace("&mdash;", "—")
-        .replace("&ndash;", "–")
-        .replace("&hellip;", "…");
-    let lines: Vec<&str> = decoded.lines().map(str::trim).collect();
-    BLANK_RUN
-        .replace_all(&lines.join("\n"), "\n\n")
-        .trim()
-        .to_string()
 }
 
 /// Convert a Kindle format via Calibre's `ebook-convert`.
@@ -177,25 +145,6 @@ pub fn which(program: &str) -> Option<std::path::PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn html_keeps_prose_and_drops_markup() {
-        let html = "<html><head><style>p{color:red}</style></head><body>\
-                    <h1>Title</h1><p>First &amp; second.</p><p>Third</p>\
-                    <script>alert('x')</script></body></html>";
-        let out = strip_html(html);
-        assert!(out.contains("Title"));
-        assert!(out.contains("First & second."));
-        assert!(out.contains("Third"));
-        assert!(!out.contains("color:red"));
-        assert!(!out.contains("alert"));
-    }
-
-    #[test]
-    fn html_separates_block_elements() {
-        let out = strip_html("<p>one</p><p>two</p>");
-        assert!(out.contains('\n'), "blocks ran together: {out:?}");
-    }
 
     #[test]
     fn unsupported_extension_names_the_alternatives() {

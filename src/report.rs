@@ -6,13 +6,23 @@
 //! in it and a skill that knows it has a hole.
 
 use crate::extract::Extraction;
+use crate::source::{Doc, SourceSummary};
 use crate::{structure, tokens};
 use serde::Serialize;
 use std::path::Path;
 
 #[derive(Debug, Serialize)]
 pub struct FileReport {
+    /// What this document is called: a path, a URL, or `owner/repo:file`.
     pub path: String,
+    /// The URL or repository it came from, when that is not `path` itself.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
+    /// Where it sits on disk, when it does. Only a real file can be reopened —
+    /// to render its pages — so anything that acts on a document later uses
+    /// this and not `path`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub local_path: Option<String>,
     pub method: String,
     pub characters: usize,
     pub estimated_tokens: usize,
@@ -26,9 +36,15 @@ pub struct FileReport {
 }
 
 impl FileReport {
-    pub fn new(path: &Path, extraction: &Extraction, text: &str, removed: usize) -> Self {
+    pub fn new(doc: &Doc, extraction: &Extraction, text: &str, removed: usize) -> Self {
+        let local_path = doc
+            .local_path()
+            .map(|p| p.display().to_string())
+            .filter(|p| *p != doc.label);
         FileReport {
-            path: path.display().to_string(),
+            path: doc.label.clone(),
+            origin: doc.origin.clone(),
+            local_path,
             method: extraction.method.clone(),
             characters: text.chars().count(),
             estimated_tokens: tokens::estimate(text),
@@ -47,6 +63,10 @@ pub struct RunReport {
     pub characters: usize,
     pub estimated_tokens: usize,
     pub structure: structure::Structure,
+    /// One entry per source the user named, and what it contributed. A crawl
+    /// that stopped at its page limit says so here — the difference between
+    /// "this is the site" and "this is the first 50 pages of it".
+    pub sources: Vec<SourceSummary>,
     pub files: Vec<FileReport>,
     /// Files that produced nothing, with the reason. Empty on a clean run.
     pub failures: Vec<String>,
@@ -67,6 +87,7 @@ impl RunReport {
     pub fn new(
         text_path: &Path,
         combined: &str,
+        sources: Vec<SourceSummary>,
         files: Vec<FileReport>,
         failures: Vec<String>,
     ) -> Self {
@@ -74,7 +95,8 @@ impl RunReport {
             .iter()
             .filter(|f| !f.pages_needing_ocr.is_empty())
             .map(|f| VisualReadRequest {
-                path: f.path.clone(),
+                // `render` opens a file, so point it at the one on disk.
+                path: f.local_path.clone().unwrap_or_else(|| f.path.clone()),
                 pages: f.pages_needing_ocr.clone(),
             })
             .collect();
@@ -84,6 +106,7 @@ impl RunReport {
             characters: combined.chars().count(),
             estimated_tokens: tokens::estimate(combined),
             structure: structure::detect(combined),
+            sources,
             files,
             failures,
             needs_visual_reading,
@@ -92,7 +115,11 @@ impl RunReport {
 
     pub fn print_summary(&self, text_path: &Path, meta_path: &Path) {
         eprintln!();
-        eprintln!("extracted {} file(s)", self.files.len());
+        eprintln!(
+            "extracted {} document(s) from {} source(s)",
+            self.files.len(),
+            self.sources.len()
+        );
         eprintln!(
             "  {} characters, ~{} tokens",
             self.characters, self.estimated_tokens
@@ -106,8 +133,21 @@ impl RunReport {
                 ""
             }
         );
-        for file in &self.files {
-            eprintln!("  {} — {}", file.path, file.method);
+        for source in &self.sources {
+            eprintln!(
+                "  {} — {}, {} document(s)",
+                source.source, source.kind, source.documents
+            );
+            for note in &source.notes {
+                eprintln!("      note: {note}");
+            }
+        }
+        // Listing every document is useful for a handful of files and noise for
+        // a fifty-page crawl, where what matters is which extractors ran.
+        if self.files.len() <= 10 {
+            for file in &self.files {
+                eprintln!("  {} — {}", file.path, file.method);
+            }
         }
         if !self.needs_visual_reading.is_empty() {
             let total: usize = self

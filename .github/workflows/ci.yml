@@ -103,8 +103,34 @@ jobs:
           set -euo pipefail
           ./target/release/anything-to-skill check
           ./target/release/anything-to-skill formats | grep -q epub
+          ./target/release/anything-to-skill sources | grep -q 'documentation site'
           ./target/release/anything-to-skill render paper.pdf --pages 1 --out ./png
           test -n "$(find ./png -name '*.png')"
+
+      # The web and repository paths only ever run against a real server, so a
+      # unit test cannot cover them. Both targets are this repository itself.
+      - name: Read a URL
+        run: |
+          set -euo pipefail
+          ./target/release/anything-to-skill extract \
+            https://raw.githubusercontent.com/${{ github.repository }}/main/SKILL.md \
+            --out ./work-url
+          grep -q "Anything to Skill" ./work-url/full_text.txt
+
+      - name: Read a repository
+        run: |
+          set -euo pipefail
+          ./target/release/anything-to-skill extract \
+            https://github.com/${{ github.repository }} --out ./work-repo
+          # The README is read first, so it heads the output.
+          head -1 ./work-repo/full_text.txt | grep -q "README.md"
+          python3 - <<'EOF'
+          import json
+          meta = json.load(open("./work-repo/metadata.json"))
+          assert meta["sources"][0]["kind"] == "repo", meta["sources"]
+          assert meta["sources"][0]["documents"] > 1, meta["sources"]
+          print("ok:", meta["sources"][0]["documents"], "documents")
+          EOF
 
       - name: Unsupported input fails loudly
         run: |
