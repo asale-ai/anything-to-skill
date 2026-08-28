@@ -1,6 +1,10 @@
 # anything-to-skill
 
-Turn a book, a paper, a documentation site, or a repository into an agent skill.
+**Turn a book, a paper, a documentation site, or a repository into an agent skill.**
+
+[![CI](https://github.com/asale-ai/anything-to-skill/actions/workflows/ci.yml/badge.svg)](https://github.com/asale-ai/anything-to-skill/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/anything-to-skill.svg)](https://crates.io/crates/anything-to-skill)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 Point your agent at a source and it reads the whole thing, then writes a skill
 that carries what the source actually teaches — for Claude Code, Codex, Gemini
@@ -39,41 +43,6 @@ The navigation, the sidebar, the version switcher and the footer are gone. The
 code block kept its indentation. The page says where it came from. That last
 part matters more than it looks: a crawl concatenates dozens of pages, and a
 claim you cannot trace is a claim you cannot check.
-
-## Sources
-
-| | |
-|---|---|
-| **A book, paper, or manual** | `anything-to-skill extract ~/books/ddia.pdf` |
-| **A page or a paper** | `anything-to-skill extract https://arxiv.org/pdf/2501.00001` |
-| **A documentation site** | `anything-to-skill extract https://docs.example.com/guide/ --crawl` |
-| **A repository** | `anything-to-skill extract owner/repo` |
-
-Run `anything-to-skill sources` for every accepted form — SSH remotes, `tree`
-and `blob` URLs, branches, subdirectories.
-
-**Sites** are crawled one request at a time, on the same host, at or below the
-directory you named, bounded by `--max-pages` and `--depth`, and `robots.txt` is
-honoured. When a site publishes its documentation as an `llms.txt`, that is read
-instead of crawling — the site's own curated text, in one request:
-
-```
-$ anything-to-skill extract https://svelte.dev/ --crawl
-crawling https://svelte.dev/ ...
-  https://svelte.dev/llms-full.txt — reading it instead of crawling
-
-extracted 1 document(s) from 1 source(s)
-  1179728 characters, ~208777 tokens
-```
-
-**Repositories** are shallow-cloned and read in the order a person opens one:
-the README, then `docs/`, then the rest. Prose only — pass `--include` when the
-source itself is the documentation.
-
-Whatever a run could *not* read is written to `metadata.json` and repeated on
-screen: a crawl that stopped at its page limit, pages `robots.txt` withheld, PDF
-pages with no extractable text. A skill whose gaps are stated is usable; one
-that hides them is a trap for whoever loads it next.
 
 ## Install
 
@@ -122,6 +91,41 @@ It will read the source, ask what you want the skill *for* — quick reference,
 a working guide, or deep study — and write the skill at that depth. When a PDF
 page cannot be read as text, it renders that page and reads it as an image
 instead of quietly leaving a hole.
+
+## Sources
+
+| | |
+|---|---|
+| **A book, paper, or manual** | `anything-to-skill extract ~/books/ddia.pdf` |
+| **A page or a paper** | `anything-to-skill extract https://arxiv.org/pdf/2501.00001` |
+| **A documentation site** | `anything-to-skill extract https://docs.example.com/guide/ --crawl` |
+| **A repository** | `anything-to-skill extract owner/repo` |
+
+Run `anything-to-skill sources` for every accepted form — SSH remotes, `tree`
+and `blob` URLs, branches, subdirectories.
+
+**Sites** are crawled one request at a time, on the same host, at or below the
+directory you named, bounded by `--max-pages` and `--depth`, and `robots.txt` is
+honoured. When a site publishes its documentation as an `llms.txt`, that is read
+instead of crawling — the site's own curated text, in one request:
+
+```
+$ anything-to-skill extract https://svelte.dev/ --crawl
+crawling https://svelte.dev/ ...
+  https://svelte.dev/llms-full.txt — reading it instead of crawling
+
+extracted 1 document(s) from 1 source(s)
+  1179728 characters, ~208777 tokens
+```
+
+**Repositories** are shallow-cloned and read in the order a person opens one:
+the README, then `docs/`, then the rest. Prose only — pass `--include` when the
+source itself is the documentation.
+
+Whatever a run could *not* read is written to `metadata.json` and repeated on
+screen: a crawl that stopped at its page limit, pages `robots.txt` withheld, PDF
+pages with no extractable text. A skill whose gaps are stated is usable; one
+that hides them is a trap for whoever loads it next.
 
 ## Formats
 
