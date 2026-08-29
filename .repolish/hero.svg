@@ -97,5 +97,5 @@
   <g fill="#4be0d0"><rect x="1032" y="120" width="8" height="8" rx="1"/></g>
   <g fill="#47e2d0"><rect x="1040" y="120" width="8" height="8" rx="1"/></g>
   <g fill="#43e5d0"><rect x="1048" y="120" width="8" height="8" rx="1"/></g>
-  <text class="t" x="600" y="184" font-size="19" fill="#8b87a3" text-anchor="middle">Turn a book, a paper, a documentation site, or a repository into an agent skill — and keep it…</text>
+  <text class="t" x="600" y="184" font-size="19" fill="#8b87a3" text-anchor="middle">Turn any PDF, EPUB, DOCX, or slide deck into an agent skill. A CLI + skill that reads whole b…</text>
 </svg>

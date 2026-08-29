@@ -10,7 +10,12 @@ skill — and keep it worth loading afterwards.**
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![repolish](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/asale-ai/anything-to-skill/main/.repolish/badge.json)](https://github.com/asale-ai/repolish)
 
+**English** · [简体中文](README.zh-CN.md)
+
 <img src=".repolish/overview.svg" alt="anything-to-skill at a glance" width="880">
+
+![terminal recording](.repolish/demo.svg)
+
 
 
 Four verbs, for Claude Code, Codex, Gemini CLI, opencode, and anything else

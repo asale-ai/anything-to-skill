@@ -54,24 +54,24 @@
   <g fill="#53d9d0"><rect x="256" y="49" width="4" height="4" rx="1"/></g>
   <g fill="#4bdfd0"><rect x="260" y="49" width="4" height="4" rx="1"/></g>
   <g fill="#43e5d0"><rect x="264" y="37" width="4" height="4" rx="1"/><rect x="264" y="41" width="4" height="4" rx="1"/><rect x="264" y="45" width="4" height="4" rx="1"/><rect x="264" y="49" width="4" height="4" rx="1"/><rect x="264" y="53" width="4" height="4" rx="1"/><rect x="264" y="57" width="4" height="4" rx="1"/><rect x="264" y="61" width="4" height="4" rx="1"/></g>
-  <text class="t" x="844" y="56" font-size="13" fill="#8b87a3" text-anchor="end">cli · local</text>
+  <text class="t" x="844" y="56" font-size="13" fill="#8b87a3" text-anchor="end">cli · remote</text>
   <rect x="36" y="84" width="808" height="1" fill="#35334a"/>
   <text class="t" x="36" y="170" font-size="64" fill="#a9f05f" text-anchor="start" font-weight="700">89</text>
   <text class="t" x="36" y="196" font-size="13" fill="#8b87a3" text-anchor="start">/ 100  ·  good</text>
   <text class="t" x="236" y="140" font-size="11" fill="#8b87a3" text-anchor="start" letter-spacing="1.4">DISCOVERABILITY</text>
-  <rect x="472" y="131" width="22" height="9" rx="2.0" fill="#43e5d0"/>
-  <rect x="500" y="131" width="22" height="9" rx="2.0" fill="#43e5d0"/>
-  <rect x="528" y="131" width="22" height="9" rx="2.0" fill="#43e5d0"/>
-  <rect x="556" y="131" width="22" height="9" rx="2.0" fill="#43e5d0"/>
-  <rect x="584" y="131" width="22" height="9" rx="2.0" fill="#43e5d0"/>
-  <rect x="612" y="131" width="22" height="9" rx="2.0" fill="#43e5d0"/>
-  <rect x="640" y="131" width="22" height="9" rx="2.0" fill="#43e5d0"/>
-  <rect x="668" y="131" width="22" height="9" rx="2.0" fill="#43e5d0"/>
-  <rect x="696" y="131" width="22" height="9" rx="2.0" fill="#43e5d0"/>
-  <rect x="724" y="131" width="22" height="9" rx="2.0" fill="#43e5d0"/>
-  <rect x="752" y="131" width="22" height="9" rx="2.0" fill="#43e5d0"/>
-  <rect x="780" y="131" width="22" height="9" rx="2.0" fill="#43e5d0"/>
-  <text class="t" x="844" y="140" font-size="13" fill="#43e5d0" text-anchor="end" font-weight="700">100</text>
+  <rect x="472" y="131" width="22" height="9" rx="2.0" fill="#a9f05f"/>
+  <rect x="500" y="131" width="22" height="9" rx="2.0" fill="#a9f05f"/>
+  <rect x="528" y="131" width="22" height="9" rx="2.0" fill="#a9f05f"/>
+  <rect x="556" y="131" width="22" height="9" rx="2.0" fill="#a9f05f"/>
+  <rect x="584" y="131" width="22" height="9" rx="2.0" fill="#a9f05f"/>
+  <rect x="612" y="131" width="22" height="9" rx="2.0" fill="#a9f05f"/>
+  <rect x="640" y="131" width="22" height="9" rx="2.0" fill="#a9f05f"/>
+  <rect x="668" y="131" width="22" height="9" rx="2.0" fill="#a9f05f"/>
+  <rect x="696" y="131" width="22" height="9" rx="2.0" fill="#a9f05f"/>
+  <rect x="724" y="131" width="22" height="9" rx="2.0" fill="#a9f05f"/>
+  <rect x="752" y="131" width="22" height="9" rx="2.0" fill="#3e3b58"/>
+  <rect x="780" y="131" width="22" height="9" rx="2.0" fill="#3e3b58"/>
+  <text class="t" x="844" y="140" font-size="13" fill="#a9f05f" text-anchor="end" font-weight="700">87</text>
   <text class="t" x="236" y="168" font-size="11" fill="#8b87a3" text-anchor="start" letter-spacing="1.4">COMPREHENSIBILITY</text>
   <rect x="472" y="159" width="22" height="9" rx="2.0" fill="#a9f05f"/>
   <rect x="500" y="159" width="22" height="9" rx="2.0" fill="#a9f05f"/>
@@ -82,10 +82,10 @@
   <rect x="640" y="159" width="22" height="9" rx="2.0" fill="#a9f05f"/>
   <rect x="668" y="159" width="22" height="9" rx="2.0" fill="#a9f05f"/>
   <rect x="696" y="159" width="22" height="9" rx="2.0" fill="#a9f05f"/>
-  <rect x="724" y="159" width="22" height="9" rx="2.0" fill="#3e3b58"/>
+  <rect x="724" y="159" width="22" height="9" rx="2.0" fill="#a9f05f"/>
   <rect x="752" y="159" width="22" height="9" rx="2.0" fill="#3e3b58"/>
   <rect x="780" y="159" width="22" height="9" rx="2.0" fill="#3e3b58"/>
-  <text class="t" x="844" y="168" font-size="13" fill="#a9f05f" text-anchor="end" font-weight="700">80</text>
+  <text class="t" x="844" y="168" font-size="13" fill="#a9f05f" text-anchor="end" font-weight="700">85</text>
   <text class="t" x="236" y="196" font-size="11" fill="#8b87a3" text-anchor="start" letter-spacing="1.4">CREDIBILITY</text>
   <rect x="472" y="187" width="22" height="9" rx="2.0" fill="#43e5d0"/>
   <rect x="500" y="187" width="22" height="9" rx="2.0" fill="#43e5d0"/>
@@ -102,9 +102,9 @@
   <text class="t" x="844" y="196" font-size="13" fill="#43e5d0" text-anchor="end" font-weight="700">95</text>
   <text class="t" x="36" y="240" font-size="11" fill="#8b87a3" text-anchor="start" letter-spacing="1.4">CHECKS</text>
   <circle cx="118" cy="236" r="5" fill="#43e5d0"/>
-  <circle cx="134" cy="236" r="5" fill="#8b87a3"/>
-  <circle cx="150" cy="236" r="5" fill="#8b87a3"/>
-  <circle cx="166" cy="236" r="5" fill="#8b87a3"/>
+  <circle cx="134" cy="236" r="5" fill="#43e5d0"/>
+  <circle cx="150" cy="236" r="5" fill="#ffc53d"/>
+  <circle cx="166" cy="236" r="5" fill="#ff4f6e"/>
   <circle cx="182" cy="236" r="5" fill="#43e5d0"/>
   <circle cx="198" cy="236" r="5" fill="#43e5d0"/>
   <circle cx="214" cy="236" r="5" fill="#43e5d0"/>
@@ -123,24 +123,24 @@
   <circle cx="422" cy="236" r="5" fill="#43e5d0"/>
   <circle cx="438" cy="236" r="5" fill="#43e5d0"/>
   <circle cx="454" cy="236" r="5" fill="#ff4f6e"/>
-  <text class="t" x="844" y="240" font-size="12" fill="#8b87a3" text-anchor="end">18 scored · 4 not verified</text>
+  <text class="t" x="844" y="240" font-size="12" fill="#8b87a3" text-anchor="end">21 scored · 1 not verified</text>
   <rect x="36" y="276" width="808" height="1" fill="#35334a"/>
   <text class="t" x="36" y="298" font-size="11" fill="#ff5fd1" text-anchor="start" letter-spacing="1.4">TO FIX</text>
   <rect x="36" y="309" width="26" height="18" rx="5.0" fill="#ff4f6e"/>
   <text class="t" x="49" y="322" font-size="11" fill="#1a1a24" text-anchor="middle" font-weight="700">P1</text>
   <text class="t" x="74" y="322" font-size="13" fill="#edebfa" text-anchor="start" font-weight="700">readme-install-consistency</text>
   <text class="t" x="74" y="340" font-size="12" fill="#8b87a3" text-anchor="start">The install command does not match how this repository actually ships. Either add the npm packaging, or c…</text>
-  <rect x="36" y="355" width="26" height="18" rx="5.0" fill="#7d56f4"/>
-  <text class="t" x="49" y="368" font-size="11" fill="#1a1a24" text-anchor="middle" font-weight="700">P3</text>
-  <text class="t" x="74" y="368" font-size="13" fill="#edebfa" text-anchor="start" font-weight="700">code-of-conduct</text>
-  <text class="t" x="74" y="386" font-size="12" fill="#8b87a3" text-anchor="start">Adopt the Contributor Covenant verbatim (contributor-covenant.org). GitHub surfaces it on the repository…</text>
+  <rect x="36" y="355" width="26" height="18" rx="5.0" fill="#ffc53d"/>
+  <text class="t" x="49" y="368" font-size="11" fill="#1a1a24" text-anchor="middle" font-weight="700">P2</text>
+  <text class="t" x="74" y="368" font-size="13" fill="#edebfa" text-anchor="start" font-weight="700">repo-topics</text>
+  <text class="t" x="74" y="386" font-size="12" fill="#8b87a3" text-anchor="start">Piling on topics dilutes relevance. Trim to twelve or fewer. Candidates: pdf, extraction, agent, skill, j…</text>
   <rect x="36" y="401" width="26" height="18" rx="5.0" fill="#7d56f4"/>
   <text class="t" x="49" y="414" font-size="11" fill="#1a1a24" text-anchor="middle" font-weight="700">P3</text>
-  <text class="t" x="74" y="414" font-size="13" fill="#edebfa" text-anchor="start" font-weight="700">docs-presence</text>
-  <text class="t" x="74" y="432" font-size="12" fill="#8b87a3" text-anchor="start">Move what no longer fits in the README — configuration reference, advanced usage, architecture — into `do…</text>
-  <text class="t" x="74" y="452" font-size="12" fill="#8b87a3" text-anchor="start">+1 more — run repolish -v</text>
+  <text class="t" x="74" y="414" font-size="13" fill="#edebfa" text-anchor="start" font-weight="700">code-of-conduct</text>
+  <text class="t" x="74" y="432" font-size="12" fill="#8b87a3" text-anchor="start">Adopt the Contributor Covenant verbatim (contributor-covenant.org). GitHub surfaces it on the repository…</text>
+  <text class="t" x="74" y="452" font-size="12" fill="#8b87a3" text-anchor="start">+3 more — run repolish -v</text>
   <rect x="36" y="472" width="808" height="1" fill="#35334a"/>
-  <text class="t" x="36" y="496" font-size="12" fill="#8b87a3" text-anchor="start">asale-ai/anything-to-skill · bfb9107b</text>
-  <text class="t" x="844" y="496" font-size="12" fill="#8b87a3" text-anchor="end">repolish v0.4.0</text>
+  <text class="t" x="36" y="496" font-size="12" fill="#8b87a3" text-anchor="start">asale-ai/anything-to-skill · 3707de1a</text>
+  <text class="t" x="844" y="496" font-size="12" fill="#8b87a3" text-anchor="end">repolish v0.4.1</text>
   <text class="t" x="36" y="514" font-size="11" fill="#8b87a3" text-anchor="start">Scoring is deterministic. No model is involved.</text>
 </svg>
