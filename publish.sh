@@ -196,7 +196,9 @@ publish rights for the @asale scope), or export NODE_AUTH_TOKEN."
 NPM_REGISTRY="https://registry.npmjs.org/"
 NPM_CONFIG_FILE="$(mktemp)"
 chmod 600 "$NPM_CONFIG_FILE"
-printf 'registry=%s\n//registry.npmjs.org/:_authToken=%s\nalways-auth=true\n' \
+# No `always-auth`: npm deprecated it, warns about it on every command, and the
+# token line above is already scoped to the registry that needs it.
+printf 'registry=%s\n//registry.npmjs.org/:_authToken=%s\n' \
     "$NPM_REGISTRY" "$NPM_AUTH_TOKEN" > "$NPM_CONFIG_FILE"
 
 # Every later trap replaces this one, so each of them has to call this too. A
