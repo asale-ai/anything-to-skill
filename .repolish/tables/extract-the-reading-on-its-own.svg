@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="238" viewBox="0 0 880 238" lang="en" role="img" aria-label="extract — the reading, on its own — table">
+  <defs>
+    <linearGradient id="brand" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7d56f4"/>
+      <stop offset="0.55" stop-color="#ff5fd1"/>
+      <stop offset="1" stop-color="#43e5d0"/>
+    </linearGradient>
+  </defs>
+  <style>
+    .t { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", "Noto Sans Mono CJK SC", "Noto Sans Mono CJK JP", "Microsoft YaHei", "Hiragino Sans", "Yu Gothic", monospace; }
+  </style>
+  <rect x="0" y="0" width="880" height="238" rx="18.0" fill="#1a1a24"/>
+  <rect x="0.5" y="0.5" width="879" height="237" rx="17.5" fill="none" stroke="#35334a"/>
+  <text class="t" x="28" y="38" font-size="11" fill="#8b87a3" text-anchor="start" letter-spacing="1.4">EXTRACT — THE READING, ON ITS OWN</text>
+  <rect x="28" y="60" width="824" height="1" fill="#35334a"/>
+  <text class="t" x="28" y="84" font-size="13" fill="#edebfa" text-anchor="start">A book, paper, or manual</text>
+  <rect x="243" y="71" width="314" height="19" rx="4.0" fill="#222130"/>
+  <text class="t" x="249" y="84" font-size="12" fill="#edebfa" text-anchor="start">anything-to-skill extract ~/books/ddia.pdf</text>
+  <rect x="20" y="95" width="840" height="35" rx="5.0" fill="#222130"/>
+  <text class="t" x="28" y="119" font-size="13" fill="#edebfa" text-anchor="start">A page or a paper</text>
+  <rect x="243" y="106" width="430" height="19" rx="4.0" fill="#222130"/>
+  <text class="t" x="249" y="119" font-size="12" fill="#edebfa" text-anchor="start">anything-to-skill extract https://arxiv.org/pdf/2501.00001</text>
+  <text class="t" x="28" y="154" font-size="13" fill="#edebfa" text-anchor="start">A documentation site</text>
+  <rect x="243" y="141" width="480" height="19" rx="4.0" fill="#222130"/>
+  <text class="t" x="249" y="154" font-size="12" fill="#edebfa" text-anchor="start">anything-to-skill extract https://docs.example.com/guide/ --crawl</text>
+  <rect x="20" y="165" width="840" height="35" rx="5.0" fill="#222130"/>
+  <text class="t" x="28" y="189" font-size="13" fill="#edebfa" text-anchor="start">A repository</text>
+  <rect x="243" y="176" width="271" height="19" rx="4.0" fill="#222130"/>
+  <text class="t" x="249" y="189" font-size="12" fill="#edebfa" text-anchor="start">anything-to-skill extract owner/repo</text>
+  <rect x="28" y="200" width="824" height="1" fill="#35334a"/>
+</svg>
