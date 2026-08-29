@@ -1,6 +1,6 @@
 {
   "name": "@asale/anything-to-skill",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Turn books, documents, documentation sites and repositories into agent skills — and grade, test and refresh the skills you already have",
   "keywords": [
     "agent-skills",
