@@ -3,11 +3,21 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/asale-ai/anything-to-skill/main/install.sh | sh
 #
-# Options (environment variables):
-#   VERSION   release to install, v0.2.0 or 0.2.0 (default: latest release)
-#   BIN_DIR   where to put the binary            (default: ~/.local/bin)
-#   SKILL     1 to install the skill too         (default: 0, binary only)
-#   SKILL_DIR where to put the skill             (default: ~/.agents/skills)
+# Options, as flags when the script is run from a file, or as environment
+# variables when it is piped into sh (which has no way to pass flags):
+#
+#   --version <v>            VERSION                release to install,
+#                                                   v0.3.1 or 0.3.1
+#                                                   (default: latest release)
+#   --bin-dir <dir>          BIN_DIR                where to put the binary
+#                                                   (default: ~/.local/bin)
+#   --skill                  SKILL=1                install the skill too
+#                                                   (default: binary only)
+#   --skill-dir <dir>        SKILL_DIR              where to put the skill
+#                                                   (default: ~/.agents/skills)
+#   --insecure-skip-verify   INSECURE_SKIP_VERIFY=1 install without checking the
+#                                                   download (unsafe)
+#   --help                                          print this and exit
 #
 # The download is verified against the release's published SHA256 before it is
 # installed. Verification failing, the checksum file being unreachable, and no
@@ -25,6 +35,57 @@ SKILL_DIR="${SKILL_DIR:-$HOME/.agents/skills}"
 say() { printf '%s\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 
+usage() {
+    say "Install anything-to-skill.
+
+  curl -fsSL https://raw.githubusercontent.com/$REPO/main/install.sh | sh
+
+Options, as flags when this script is run from a file, or as environment
+variables when it is piped into sh (which has no way to pass flags):
+
+  --version <v>            VERSION                release to install, v0.3.1 or
+                                                  0.3.1 (default: the latest)
+  --bin-dir <dir>          BIN_DIR                where to put the binary
+                                                  (default: ~/.local/bin)
+  --skill                  SKILL=1                install the skill too
+                                                  (default: binary only)
+  --skill-dir <dir>        SKILL_DIR              where to put the skill
+                                                  (default: ~/.agents/skills)
+  --insecure-skip-verify   INSECURE_SKIP_VERIFY=1 install without checking the
+                                                  download (unsafe)
+  -h, --help                                      print this and exit
+
+The download is verified against the release's published SHA256 before it is
+installed. Verification failing, the checksum file being unreachable, and no
+SHA256 tool being available are all fatal — nothing is written in any of them."
+}
+
+# Flags override the environment variables read above, so `--bin-dir` wins over
+# BIN_DIR when both are given. Piping into sh passes no arguments at all, which
+# is why every flag still has a variable that does the same thing.
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -h|--help)     usage; exit 0 ;;
+        --version)     [ $# -ge 2 ] || die "--version needs a release, e.g. --version 0.3.1"
+                       VERSION="$2"; shift ;;
+        --version=*)   VERSION="${1#--version=}" ;;
+        --bin-dir)     [ $# -ge 2 ] || die "--bin-dir needs a directory"
+                       BIN_DIR="$2"; shift ;;
+        --bin-dir=*)   BIN_DIR="${1#--bin-dir=}" ;;
+        --skill)       SKILL=1 ;;
+        # Naming a directory for the skill is only ever meant as "install it,
+        # there" — asking for --skill as well would be a papercut.
+        --skill-dir)   [ $# -ge 2 ] || die "--skill-dir needs a directory"
+                       SKILL_DIR="$2"; SKILL=1; shift ;;
+        --skill-dir=*) SKILL_DIR="${1#--skill-dir=}"; SKILL=1 ;;
+        --insecure-skip-verify) INSECURE_SKIP_VERIFY=1 ;;
+        *)             printf 'error: unknown option: %s\n\n' "$1" >&2
+                       usage >&2
+                       exit 2 ;;
+    esac
+    shift
+done
+
 need() {
     command -v "$1" >/dev/null 2>&1 || die "this installer needs '$1', which was not found"
 }
@@ -37,14 +98,18 @@ done
 # a release download redirects to a separate asset host, and without this a
 # hijacked redirect could quietly drop the transfer down to plaintext HTTP.
 if command -v curl >/dev/null 2>&1; then
-    CURL_OPTS="-fsSL --proto =https --proto-redir =https --tlsv1.2 --retry 3"
+    # --connect-timeout bounds the part that hangs when there is no network at
+    # all; the transfer itself is left unbounded, because a slow link is not an
+    # error and a half-downloaded binary would fail the checksum anyway.
+    CURL_OPTS="-fsSL --proto =https --proto-redir =https --tlsv1.2 --retry 3 --connect-timeout 10"
     # shellcheck disable=SC2086  # word splitting of the option list is intended
     fetch() { curl $CURL_OPTS "$1" -o "$2"; }
     # shellcheck disable=SC2086
     fetch_stdout() { curl $CURL_OPTS "$1"; }
 elif command -v wget >/dev/null 2>&1; then
     # busybox wget has neither flag, so only pass them when they are understood.
-    WGET_OPTS="-q"
+    # -T is the connect/read timeout; busybox wget and GNU wget both take it.
+    WGET_OPTS="-q -T 10"
     if wget --help 2>&1 | grep -q -- '--https-only'; then
         WGET_OPTS="$WGET_OPTS --https-only --secure-protocol=TLSv1_2"
     fi
@@ -111,7 +176,8 @@ if [ -z "$version" ]; then
     version="$(fetch_stdout "https://api.github.com/repos/$REPO/releases/latest" \
         | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n 1)"
     [ -n "$version" ] || die "could not determine the latest release
-Set VERSION explicitly, e.g. VERSION=v0.1.0 sh install.sh"
+A working network connection is required to look one up. If the network is
+fine, name the release instead: sh install.sh --version 0.3.1"
 else
     # Releases are tagged "vX.Y.Z" while the archives are named "X.Y.Z", so a
     # bare VERSION=0.1.0 is the obvious thing to type. Accept both spellings.
@@ -137,7 +203,8 @@ trap 'cleanup; exit 143' TERM
 
 say "Downloading $name ..."
 fetch "$url" "$tmp/$name.tar.gz" || die "download failed: $url
-Check that a release for $target exists at https://github.com/$REPO/releases"
+A working network connection is required. If the network is fine, check that a
+release for $target exists at https://github.com/$REPO/releases"
 
 # Verify before unpacking, so a tampered archive is never even extracted.
 if [ "${INSECURE_SKIP_VERIFY:-0}" = "1" ]; then
@@ -145,7 +212,7 @@ if [ "${INSECURE_SKIP_VERIFY:-0}" = "1" ]; then
 else
     sums_url="https://github.com/$REPO/releases/download/${version}/SHA256SUMS"
     fetch "$sums_url" "$tmp/SHA256SUMS" || die "could not download the checksums: $sums_url
-Refusing to install unverified. Retry, or set INSECURE_SKIP_VERIFY=1 to bypass."
+Refusing to install unverified. Retry, or pass --insecure-skip-verify to bypass."
 
     # Escape the regex metacharacters in the filename (it contains dots) so the
     # pattern matches literally rather than treating them as wildcards.
@@ -155,11 +222,11 @@ Refusing to install unverified. Retry, or set INSECURE_SKIP_VERIFY=1 to bypass."
     expected="$(sed -n "s/^\([0-9a-fA-F]\{64\}\)  *${escaped}[[:space:]]*\$/\1/p" \
         "$tmp/SHA256SUMS" | head -n 1)"
     [ -n "$expected" ] || die "no checksum published for ${name}.tar.gz
-Refusing to install unverified. Set INSECURE_SKIP_VERIFY=1 to bypass."
+Refusing to install unverified. Pass --insecure-skip-verify to bypass."
 
     actual="$(sha256_of "$tmp/$name.tar.gz")" || die "could not compute the download's SHA256
 Needs a working sha256sum, shasum, or openssl. Refusing to install unverified.
-Set INSECURE_SKIP_VERIFY=1 to bypass."
+Pass --insecure-skip-verify to bypass."
 
     [ "$actual" = "$expected" ] || die "checksum mismatch — refusing to install
   expected $expected

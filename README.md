@@ -94,7 +94,9 @@ line — and the installer places the skill as well as the binary. Both verify
 the download against the release's published SHA256 and install nothing if it
 does not match. Set `BIN_DIR` (`$env:BIN_DIR`) to install somewhere other than
 `~/.local/bin`; `$env:ADD_TO_PATH = '1'` puts that directory on your PATH on
-Windows.
+Windows. Downloaded rather than piped, `install.sh` takes the same settings as
+flags — `sh install.sh --help` lists them, and `install.ps1` already takes them
+as parameters.
 
 With Rust already installed, `cargo install anything-to-skill` builds it from
 source.
