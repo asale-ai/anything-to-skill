@@ -189,3 +189,74 @@ jobs:
             ```bash
             sha256sum -c SHA256SUMS --ignore-missing
             ```
+
+  # npm is published from here over OIDC (npm trusted publishing), so no npm
+  # token exists anywhere: not in a repository secret, not in a maintainer's
+  # .env. The trusted publisher is configured on the package's /access page and
+  # names this repository and this file by name — renaming either one stops
+  # publishing until the npm side is changed to match.
+  npm:
+    name: Publish to npm
+    # After the binaries and the GitHub release exist: the published package
+    # downloads the release for its own version during postinstall, so shipping
+    # it earlier would put a version on npm that cannot install itself.
+    needs: release
+    # Only a tag push carries the version this job publishes; on
+    # workflow_dispatch github.ref is the branch. A skipped job does not fail
+    # the run, which is why publish.sh confirms the version reached the
+    # registry instead of reading it off a green workflow.
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # This is the publishing credential itself, not an extra permission: npm
+      # verifies the OIDC token GitHub mints for this job.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # Deliberately no registry-url: setup-node would write an .npmrc
+      # referencing NODE_AUTH_TOKEN, which does not exist on the OIDC path, and
+      # npm would authenticate with an empty string instead of the token it
+      # minted for itself.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # Trusted publishing needs npm >= 11.5.1. An older npm fails with a plain
+      # "need auth" and never mentions its version, so this is not belt and
+      # braces — without it the failure is unreadable.
+      - name: Update npm
+        run: npm install -g npm@latest
+
+      - name: Check the tag matches package.json
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          pkg=$(node -p "require('./npm/package.json').version")
+          [ "$tag" = "$pkg" ] || {
+            echo "::error::tag v$tag but npm/package.json says $pkg"
+            exit 1
+          }
+
+      # The package's `files` list names LICENSE, and this repository keeps one
+      # licence at the root rather than a copy per package directory. Without
+      # this the tarball declares Apache-2.0 and carries no licence text.
+      - name: Stage LICENSE
+        run: cp LICENSE npm/LICENSE
+
+      - name: Publish
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          name=$(node -p "require('./npm/package.json').name")
+          # Ask the real registry, never a mirror: re-running a tag is an
+          # ordinary thing to do, and this is what makes that safe.
+          if npm view "$name@$version" version \
+               --registry https://registry.npmjs.org/ >/dev/null 2>&1; then
+            echo "$name@$version is already on npm — nothing to do"
+            exit 0
+          fi
+          # --provenance is passed explicitly. The docs say trusted publishing
+          # implies it; in practice the publish fails without the flag.
+          cd npm && npm publish --provenance

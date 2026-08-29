@@ -14,8 +14,12 @@
 #                (default: "Release vX.Y.Z")
 #   --dry-run    run every check and both dry-run publishes, but never commit,
 #                push, or publish for real
-#   --no-wait    do not wait for the GitHub release build to produce binaries
+#   --no-wait    do not wait for the GitHub release build to produce binaries,
+#                nor for the workflow to publish the npm package
 #   --skip-tests skip fmt/clippy/test (they already ran in CI, say)
+#   --local-npm  publish the npm package from this machine instead of waiting
+#                for the release workflow to do it. npm asks for a 2FA code
+#                interactively, so this needs a terminal and an `npm login`.
 #
 # There is no confirmation prompt. Once the gates and both rehearsal publishes
 # pass, the release runs straight through to the end — so --dry-run is the only
@@ -31,6 +35,12 @@
 # land — and the build has to finish — before anything advertises the new
 # version. Publishing is not reversible — crates.io only allows yanking —
 # so everything that can fail is made to fail before the first push.
+#
+# Four of those five are published from here. npm is not: the release workflow
+# publishes it over OIDC (npm trusted publishing), so no npm credential exists
+# on this machine or in the repository secrets. This script waits for that
+# version to appear on the registry and says so if it never does. --local-npm
+# publishes it from here instead, for the case where the workflow could not.
 
 set -euo pipefail
 
@@ -41,7 +51,8 @@ SKILL_OWNER="asale-ai"
 NPM_PKG="@asale/anything-to-skill"
 NPM_DIR="npm"
 MAIN_BRANCH="main"
-WAIT_TIMEOUT=1500   # seconds to wait for the release build (25 minutes)
+WAIT_TIMEOUT=1500       # seconds to wait for the release build (25 minutes)
+NPM_WAIT_TIMEOUT=900    # seconds to wait for the workflow's npm job (15 minutes)
 
 cd "$(dirname "$0")"
 
@@ -67,6 +78,7 @@ MESSAGE=""
 DRY_RUN=0
 WAIT_FOR_BUILD=1
 SKIP_TESTS=0
+LOCAL_NPM=0
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -83,6 +95,7 @@ while [ $# -gt 0 ]; do
         --yes|-y)     ;;
         --no-wait)    WAIT_FOR_BUILD=0 ;;
         --skip-tests) SKIP_TESTS=1 ;;
+        --local-npm)  LOCAL_NPM=1 ;;
         # The header comment is the help text: print it up to the blank line
         # that ends it, minus the leading "# ".
         -h|--help)    sed -n '2,/^$/p' "$0" | sed 's/^#\{0,1\} \{0,1\}//'; exit 0 ;;
@@ -126,10 +139,10 @@ if [ -n "${CARGO_REGISTRY_TOKEN:-}" ]; then
     export CARGO_REGISTRIES_CRATES_IO_TOKEN="${CARGO_REGISTRIES_CRATES_IO_TOKEN:-$CARGO_REGISTRY_TOKEN}"
 fi
 
-# npm. NPM_TOKEN is what .env is expected to carry; the other two are what CI
-# and the wider ecosystem call the same thing, and accepting all three costs
-# nothing.
-NPM_AUTH_TOKEN="${NPM_TOKEN:-${NPM_API_KEY:-${NODE_AUTH_TOKEN:-}}}"
+# No npm credential is read here. npm publishes through trusted publishing in
+# the release workflow, and this package is set to require 2FA and disallow
+# bypass tokens — so an automation token could not publish it even if one
+# existed. --local-npm uses the machine's own `npm login` and its 2FA prompt.
 
 # ---------------------------------------------------------------- preflight ---
 
@@ -178,45 +191,33 @@ clawhub whoami >/dev/null 2>&1 \
     || die "clawhub is not authenticated. Run 'clawhub login' (or set CLAWHUB_API_KEY in .env)."
 info "clawhub user: $(clawhub whoami 2>/dev/null | tail -1)"
 
-[ -n "$NPM_AUTH_TOKEN" ] \
-    || die "no npm token. Put NPM_TOKEN in .env (an npm automation token with
-publish rights for the @asale scope), or export NODE_AUTH_TOKEN."
 [ -f "$NPM_DIR/package.json" ] \
     || die "$NPM_DIR/package.json is missing — the npm launcher is part of the release."
 
-# The token is written to a config file of our own rather than the user's
-# ~/.npmrc: a release script has no business editing the machine's npm login,
-# and a file we create is a file we can guarantee is deleted.
-#
-# It pins the registry for the same reason the cargo steps pass
-# --registry crates-io: a machine with a mirror configured — registry.npmmirror.com
-# is a common one — would otherwise have `npm publish` push the release
-# somewhere that is not npm, and `npm view` answer "no such version" about a
-# registry nobody installs from.
+# The registry is named on every npm call for the same reason the cargo steps
+# pass --registry crates-io: a machine with a mirror configured —
+# registry.npmmirror.com is a common one — would have `npm view` answer "no
+# such version" about a registry nobody publishes to, and --local-npm push the
+# release somewhere nobody installs from. A mirror is a read-only cache.
 NPM_REGISTRY="https://registry.npmjs.org/"
-NPM_CONFIG_FILE="$(mktemp)"
-chmod 600 "$NPM_CONFIG_FILE"
-# No `always-auth`: npm deprecated it, warns about it on every command, and the
-# token line above is already scoped to the registry that needs it.
-printf 'registry=%s\n//registry.npmjs.org/:_authToken=%s\n' \
-    "$NPM_REGISTRY" "$NPM_AUTH_TOKEN" > "$NPM_CONFIG_FILE"
 
-# Every later trap replaces this one, so each of them has to call this too. A
-# token left in /tmp because the release failed is the worst kind of leak: the
-# one nobody goes looking for.
-cleanup_npmrc() {
-    [ -n "${NPM_CONFIG_FILE:-}" ] && rm -f "$NPM_CONFIG_FILE"
-    return 0
-}
-trap 'cleanup_npmrc' EXIT
+npm_run() { ( cd "$NPM_DIR" && npm --registry "$NPM_REGISTRY" "$@" ); }
 
-npm_run() { ( cd "$NPM_DIR" && npm --userconfig "$NPM_CONFIG_FILE" "$@" ); }
-
-npm_whoami="$(npm_run whoami 2>/dev/null || true)"
-[ -n "$npm_whoami" ] \
-    || die "the npm token was rejected. Check NPM_TOKEN in .env — it must be a
-current automation token for an account that can publish to @asale."
-info "npm user: $npm_whoami"
+if [ "$LOCAL_NPM" = 1 ]; then
+    # Checked here, not at the publish step. That step is the last thing the
+    # release does — after the commit, the tag push and crates.io — and
+    # discovering then that nothing can answer npm's 2FA prompt is the worst
+    # possible moment to discover it.
+    [ -t 0 ] \
+        || die "--local-npm needs a terminal: npm asks for a 2FA code interactively."
+    npm_whoami="$(npm_run whoami 2>/dev/null || true)"
+    [ -n "$npm_whoami" ] \
+        || die "--local-npm needs an npm login. Run:
+  npm login --registry $NPM_REGISTRY"
+    info "npm user: $npm_whoami  (--local-npm: publishing npm from this machine)"
+else
+    info "npm: published by the release workflow over OIDC; this script waits for it"
+fi
 
 # ----------------------------------------------------------------- version ---
 
@@ -290,7 +291,6 @@ restore_tree() {
     # Copied in for packing, not checked in.
     rm -f "$NPM_DIR/LICENSE"
     rm -rf "$backup_dir"
-    cleanup_npmrc
     return 0
 }
 # Armed before the lockfile sync, because that is the first thing that can fail
@@ -360,7 +360,7 @@ info "cargo publish --dry-run"
 cargo publish --registry crates-io --dry-run --allow-dirty --quiet \
     || die "cargo publish --dry-run failed"
 info "npm publish --dry-run"
-npm_run publish --dry-run --access public >/dev/null \
+npm_run publish --dry-run >/dev/null \
     || die "npm publish --dry-run failed"
 info "clawhub publish --dry-run"
 clawhub publish . --slug "$SKILL_SLUG" --owner "$SKILL_OWNER" --version "$version" --dry-run \
@@ -383,6 +383,12 @@ changes="$(git status --porcelain | sed 's/^...//')"
 [ -n "$changes" ] || die "nothing to commit — the version bump produced no change"
 change_count="$(printf '%s\n' "$changes" | wc -l | tr -d ' ')"
 
+if [ "$LOCAL_NPM" = 1 ]; then
+    npm_plan_line="publish $NPM_PKG@$version to npm from here    ${DIM}— npm will ask for 2FA${RESET}"
+else
+    npm_plan_line="wait for the workflow to publish $NPM_PKG@$version to npm"
+fi
+
 step "Releasing $CRATE $version"
 cat <<EOF
     Commit message: ${BOLD}${message}${RESET}
@@ -395,7 +401,7 @@ $(printf '%s\n' "$changes" | sed 's/^/      /')
          (the tag starts the GitHub Actions build that produces the binaries
           install.sh downloads)
       3. publish $CRATE $version to crates.io      ${DIM}— cannot be undone, only yanked${RESET}
-      4. publish $NPM_PKG@$version to npm          ${DIM}— after the binaries exist, which it downloads${RESET}
+      4. $npm_plan_line
       5. publish the skill to ClawHub as $SKILL_OWNER/$SKILL_SLUG@$version
 EOF
 
@@ -409,7 +415,7 @@ info "committed $(git rev-parse --short HEAD), tagged $tag"
 rm -rf "$backup_dir"
 
 # From here a failure leaves real state behind, so the trap explains where.
-trap 'cleanup_npmrc; printf "\n%serror:%s the release stopped partway through.\n  Local commit and tag %s exist.\n  To undo (only safe if nothing was pushed):\n    git tag -d %s && git reset --hard HEAD~1\n" "$RED" "$RESET" "$tag" "$tag" >&2' EXIT
+trap 'printf "\n%serror:%s the release stopped partway through.\n  Local commit and tag %s exist.\n  To undo (only safe if nothing was pushed):\n    git tag -d %s && git reset --hard HEAD~1\n" "$RED" "$RESET" "$tag" "$tag" >&2' EXIT
 
 step "Pushing"
 git push --quiet origin "$MAIN_BRANCH"
@@ -417,7 +423,7 @@ git push --quiet origin "$tag"
 info "pushed $MAIN_BRANCH and $tag"
 info "release build: https://github.com/$REPO_SLUG/actions/workflows/release.yml"
 
-trap 'cleanup_npmrc; printf "\n%serror:%s the release stopped after pushing %s.\n  The tag is public and the GitHub build may already have run.\n  Re-run the remaining steps by hand, or release %s next.\n" "$RED" "$RESET" "$tag" "$tag" >&2' EXIT
+trap 'printf "\n%serror:%s the release stopped after pushing %s.\n  The tag is public and the GitHub build may already have run.\n  Re-run the remaining steps by hand, or release %s next.\n" "$RED" "$RESET" "$tag" "$tag" >&2' EXIT
 
 step "Publishing to crates.io"
 cargo publish --registry crates-io --quiet \
@@ -449,11 +455,45 @@ fi
 # npm goes after the wait and not before it. The published package downloads
 # the GitHub release for its own version on install, so publishing it while the
 # build is still running would ship a version that cannot install itself.
-step "Publishing $NPM_PKG to npm"
-npm_run publish --access public \
-    || die "npm publish failed. Everything before it shipped; retry with:
-  ( cd $NPM_DIR && npm publish --access public )"
-info "$NPM_PKG@$version is on npm"
+if [ "$LOCAL_NPM" = 1 ]; then
+    step "Publishing $NPM_PKG to npm"
+    info "npm will ask for a 2FA code now."
+    npm_run publish \
+        || die "npm publish failed. Everything before it shipped; retry with:
+  ( cd $NPM_DIR && cp ../LICENSE LICENSE && npm publish --registry $NPM_REGISTRY )"
+    info "$NPM_PKG@$version is on npm"
+elif [ "$WAIT_FOR_BUILD" = 0 ]; then
+    # --no-wait already declined to wait for the build the npm job runs after,
+    # so waiting for the job itself would contradict the flag.
+    step "Not waiting for $NPM_PKG"
+    info "--no-wait was passed. Confirm the workflow published it:"
+    info "  npm view $NPM_PKG@$version version --registry $NPM_REGISTRY"
+else
+    step "Waiting for the workflow to publish $NPM_PKG"
+    info "The npm job runs after the release job and publishes over OIDC."
+    # Confirmed against the registry rather than read off a green workflow: the
+    # npm job is guarded by `if: startsWith(github.ref, 'refs/tags/v')`, so a
+    # workflow_dispatch run skips it — and a skipped job does not fail the run.
+    npm_deadline=$(( $(date +%s) + NPM_WAIT_TIMEOUT ))
+    npm_published=0
+    while :; do
+        if npm_run view "$NPM_PKG@$version" version >/dev/null 2>&1; then
+            npm_published=1
+            info "$NPM_PKG@$version is on npm"
+            break
+        fi
+        [ "$(date +%s)" -ge "$npm_deadline" ] && break
+        sleep 20
+    done
+    if [ "$npm_published" = 0 ]; then
+        warn "$NPM_PKG@$version is not on npm after $((NPM_WAIT_TIMEOUT / 60)) minutes.
+  Check the npm job: https://github.com/$REPO_SLUG/actions/workflows/release.yml
+  Everything else shipped. The binaries and the tag are already public, so
+  publishing npm afterwards is safe — re-run the workflow, or from here:
+    ./publish.sh $version --local-npm    (or by hand)
+    ( cd $NPM_DIR && cp ../LICENSE LICENSE && npm publish --registry $NPM_REGISTRY )"
+    fi
+fi
 rm -f "$NPM_DIR/LICENSE"
 
 step "Publishing the skill to ClawHub"
@@ -469,7 +509,6 @@ clawhub publish . \
     || die "clawhub publish failed. Everything else shipped; retry with:
   clawhub publish . --slug $SKILL_SLUG --owner $SKILL_OWNER --version $version"
 
-cleanup_npmrc
 trap - EXIT
 
 step "Released $CRATE $version"
