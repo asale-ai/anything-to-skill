@@ -155,3 +155,9 @@ samples/
 npm/vendor/
 npm/LICENSE
 npm/*.tgz
+
+# Nothing writes these any more — npm publishes over OIDC from the release
+# workflow and no token is stored. Kept because the cost of the line is one
+# line, and the cost of committing a credential is revoking it everywhere.
+.npmrc
+npm/.npmrc

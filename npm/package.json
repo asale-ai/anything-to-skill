@@ -28,6 +28,9 @@
     "README.md",
     "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "postinstall": "node lib/install.js"
   },
