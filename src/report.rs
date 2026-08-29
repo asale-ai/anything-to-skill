@@ -24,6 +24,9 @@ pub struct FileReport {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub local_path: Option<String>,
     pub method: String,
+    /// A fingerprint of this document's text. `refresh` compares these to say
+    /// which pages of a site actually moved, rather than only that it did.
+    pub content_hash: String,
     pub characters: usize,
     pub estimated_tokens: usize,
     pub page_count: Option<u32>,
@@ -46,6 +49,7 @@ impl FileReport {
             origin: doc.origin.clone(),
             local_path,
             method: extraction.method.clone(),
+            content_hash: crate::stamp::fingerprint(text),
             characters: text.chars().count(),
             estimated_tokens: tokens::estimate(text),
             page_count: extraction.page_count,
@@ -60,6 +64,9 @@ impl FileReport {
 #[derive(Debug, Serialize)]
 pub struct RunReport {
     pub output_text: String,
+    /// A fingerprint of the whole extraction. Two runs that produce the same
+    /// hash read the same text, which is the question `refresh` asks.
+    pub content_hash: String,
     pub characters: usize,
     pub estimated_tokens: usize,
     pub structure: structure::Structure,
@@ -103,6 +110,7 @@ impl RunReport {
 
         RunReport {
             output_text: text_path.display().to_string(),
+            content_hash: crate::stamp::fingerprint(combined),
             characters: combined.chars().count(),
             estimated_tokens: tokens::estimate(combined),
             structure: structure::detect(combined),

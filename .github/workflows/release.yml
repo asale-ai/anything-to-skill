@@ -89,6 +89,9 @@ jobs:
           mkdir -p "dist/${name}"
           cp "target/${{ matrix.target }}/release/anything-to-skill" "dist/${name}/"
           cp README.md SKILL.md SECURITY.md LICENSE "dist/${name}/"
+          # SKILL.md links into references/, so the two travel together — a
+          # skill whose links go nowhere is worse than one that never had them.
+          cp -R references "dist/${name}/"
           tar -C dist -czf "dist/${name}.tar.gz" "${name}"
           # Checksums are recorded against the bare filename so `sha256sum -c`
           # works from the directory the user downloaded into.
@@ -103,6 +106,8 @@ jobs:
           New-Item -ItemType Directory -Force -Path "dist/$name" | Out-Null
           Copy-Item "target/${{ matrix.target }}/release/anything-to-skill.exe" "dist/$name/"
           Copy-Item README.md, SKILL.md, SECURITY.md, LICENSE "dist/$name/"
+          # SKILL.md links into references/, so the two travel together.
+          Copy-Item -Recurse references "dist/$name/references"
           Compress-Archive -Path "dist/$name" -DestinationPath "dist/$name.zip"
           $hash = (Get-FileHash "dist/$name.zip" -Algorithm SHA256).Hash.ToLower()
           # Two spaces before the filename — the format `sha256sum -c` expects.

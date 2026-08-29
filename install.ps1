@@ -240,6 +240,14 @@ function Install-AnythingToSkill {
             foreach ($file in 'SKILL.md', 'LICENSE') {
                 Copy-Item -LiteralPath (Join-Path $unpacked $file) -Destination (Join-Path $skillDest $file) -Force
             }
+            # SKILL.md is a map and references/ is what it points at. Installing
+            # one without the other leaves every link in the skill going nowhere.
+            $refs = Join-Path $unpacked 'references'
+            if (Test-Path -LiteralPath $refs) {
+                $destRefs = Join-Path $skillDest 'references'
+                Remove-Item -LiteralPath $destRefs -Recurse -Force -ErrorAction SilentlyContinue
+                Copy-Item -LiteralPath $refs -Destination $destRefs -Recurse -Force
+            }
 
             Say ''
             Say "Installed the skill to $skillDest"
@@ -316,6 +324,10 @@ function Install-ClaudeLink([string] $Claude, [string] $SkillDest) {
             New-Item -ItemType Directory -Path $link -Force | Out-Null
             foreach ($file in 'SKILL.md', 'LICENSE') {
                 Copy-Item -LiteralPath (Join-Path $SkillDest $file) -Destination (Join-Path $link $file) -Force
+            }
+            $refs = Join-Path $SkillDest 'references'
+            if (Test-Path -LiteralPath $refs) {
+                Copy-Item -LiteralPath $refs -Destination (Join-Path $link 'references') -Recurse -Force
             }
             Say '  copied into ~\.claude\skills\ for Claude Code (could not link)'
         } catch {

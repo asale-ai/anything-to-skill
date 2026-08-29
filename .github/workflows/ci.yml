@@ -107,6 +107,98 @@ jobs:
           ./target/release/anything-to-skill render paper.pdf --pages 1 --out ./png
           test -n "$(find ./png -name '*.png')"
 
+      # `audit` is the one command with no model, no key and no network, so CI
+      # can hold it to the standard it holds everybody else to: this repo's own
+      # skill has to pass its own audit, warnings included.
+      - name: The project's own skill passes its own audit
+        run: |
+          set -euo pipefail
+          ./target/release/anything-to-skill audit . --strict
+          ./target/release/anything-to-skill audit . --json | python3 -c "
+          import json, sys
+          report = json.load(sys.stdin)
+          skill = report['skills'][0]
+          assert report['errors'] == 0 and report['warnings'] == 0, report
+          # The body has to stay a map: the detail lives in references/.
+          assert skill['on_trigger_tokens'] < 2000, skill['on_trigger_tokens']
+          assert skill['reference_files'] > 0, skill
+          assert skill['on_demand_tokens'] > skill['on_trigger_tokens'], skill
+          print('ok:', skill['always_loaded_tokens'], 'tokens always loaded')
+          "
+
+      - name: audit catches a broken skill
+        run: |
+          set -euo pipefail
+          mkdir -p ./bad/broken
+          printf -- '---\nname: broken\ndescription: Utilities.\n---\nSee [it](references/gone.md).\n' \
+            > ./bad/broken/SKILL.md
+          if ./target/release/anything-to-skill audit ./bad; then
+            echo "expected a non-zero exit on a broken skill" >&2
+            exit 1
+          fi
+          # It exits non-zero by design, which `pipefail` would read as the
+          # grep having failed — so take the report first, then look at it.
+          ./target/release/anything-to-skill audit ./bad --json > ./bad.json || true
+          grep -q 'broken-reference-link' ./bad.json
+
+      # `build` needs a key, but everything up to the first request does not.
+      - name: build plans a run without a key
+        run: |
+          set -euo pipefail
+          ./target/release/anything-to-skill build README.md \
+            --dry-run --name plan-test --out ./skills > ./plan.txt 2>&1
+          cat ./plan.txt
+          grep -q 'dry-run: stopping before the first request' ./plan.txt
+          test ! -e ./skills/plan-test
+          # Without --dry-run and without a key, it must fail before fetching.
+          if ./target/release/anything-to-skill build README.md --out ./skills; then
+            echo "expected a non-zero exit with no ANTHROPIC_API_KEY" >&2
+            exit 1
+          fi
+        env:
+          ANTHROPIC_API_KEY: ''
+
+      - name: refresh refuses a skill it did not build
+        run: |
+          set -euo pipefail
+          ./target/release/anything-to-skill refresh . --check > ./refresh.txt 2>&1 || true
+          grep -q '.a2s.lock' ./refresh.txt
+
+      - name: docling is asked for by name or not at all
+        run: |
+          set -euo pipefail
+          printf '<html><body><h1>x</h1></body></html>' > page.html
+          # Not installed on the runner, so the flag must fail loudly and say how.
+          ./target/release/anything-to-skill extract page.html --engine docling \
+            --out ./work-docling > ./docling.txt 2>&1 || true
+          grep -q 'pip install docling' ./docling.txt
+          # ... and the default must be untouched by its absence.
+          ./target/release/anything-to-skill extract page.html --out ./work-builtin
+          grep -q x ./work-builtin/full_text.txt
+
+      - name: MCP speaks the protocol
+        run: |
+          set -euo pipefail
+          printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
+            '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
+            '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"extract","arguments":{"sources":["README.md"]}}}' \
+            '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"read_text","arguments":{"limit":80}}}' \
+            | ./target/release/anything-to-skill mcp --work ./mcp-work > ./mcp.jsonl
+          python3 - <<'EOF'
+          import json
+          replies = [json.loads(line) for line in open("./mcp.jsonl")]
+          # A notification carries no id and must get no reply.
+          assert [r["id"] for r in replies] == [1, 2, 3, 4], [r.get("id") for r in replies]
+          assert replies[0]["result"]["serverInfo"]["name"] == "anything-to-skill"
+          names = {t["name"] for t in replies[1]["result"]["tools"]}
+          assert names == {"extract", "read_text", "audit", "sources"}, names
+          assert replies[2]["result"]["isError"] is False, replies[2]
+          assert "anything-to-skill" in replies[3]["result"]["content"][0]["text"]
+          print("ok:", sorted(names))
+          EOF
+
       # The web and repository paths only ever run against a real server, so a
       # unit test cannot cover them. Both targets are this repository itself.
       - name: Read a URL

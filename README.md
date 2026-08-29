@@ -1,48 +1,25 @@
 # anything-to-skill
 
-**Turn a book, a paper, a documentation site, or a repository into an agent skill.**
+**Turn a book, a paper, a documentation site, or a repository into an agent
+skill — and keep it worth loading afterwards.**
 
 [![CI](https://github.com/asale-ai/anything-to-skill/actions/workflows/ci.yml/badge.svg)](https://github.com/asale-ai/anything-to-skill/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/anything-to-skill.svg)](https://crates.io/crates/anything-to-skill)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-Point your agent at a source and it reads the whole thing, then writes a skill
-that carries what the source actually teaches — for Claude Code, Codex, Gemini
-CLI, opencode, and anything else that loads skills from a directory.
+Four verbs, for Claude Code, Codex, Gemini CLI, opencode, and anything else
+that loads skills from a directory:
 
-## What it does
+| | |
+|---|---|
+| **`build`** | a source in, a finished skill out — one command, no agent in the loop |
+| **`audit`** | what a skill costs you in every session, and whether it will ever fire |
+| **`eval`** | ask the source's own questions of the skill, and see which it can answer |
+| **`refresh`** | the docs moved; rebuild, and say what changed |
 
-You ask. It reads. You get a skill.
-
-> turn the Rust book's installation chapter into a skill —
-> https://doc.rust-lang.org/book/ch01-01-installation.html
-
-Underneath, your agent runs one command and gets text back — not a page of
-markup with the documentation buried in it:
-
-````
-# Installation - The Rust Programming Language
-
-source: https://doc.rust-lang.org/book/ch01-01-installation.html
-
-Installation
-
-The first step is to install Rust. We'll download Rust through rustup, a
-command line tool for managing Rust versions and associated tools. [...]
-
-Installing rustup on Linux or macOS
-
-If you're using Linux or macOS, open a terminal and enter the following command:
-
-```
-$ curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf | sh
-```
-````
-
-The navigation, the sidebar, the version switcher and the footer are gone. The
-code block kept its indentation. The page says where it came from. That last
-part matters more than it looks: a crawl concatenates dozens of pages, and a
-claim you cannot trace is a claim you cannot check.
+`extract` is still there underneath, for when you would rather read the source
+yourself and write the skill by hand. That is the default route, and the better
+one when you care about the result.
 
 ## Install
 
@@ -57,7 +34,7 @@ Gemini CLI, and opencode read directly — and symlinks it into the ones that lo
 elsewhere, Claude Code's `~/.claude/skills/` among them. Drop `-g` to install
 into the current project instead.
 
-The skill drives a small binary that does the reading:
+The skill drives a small binary that does the work:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/asale-ai/anything-to-skill/main/install.sh | sh
@@ -79,20 +56,140 @@ install nothing if it does not match. Set `BIN_DIR` (`$env:BIN_DIR`) to install
 somewhere other than `~/.local/bin`; `$env:ADD_TO_PATH = '1'` puts that
 directory on your PATH on Windows.
 
-## Use
+---
 
-Ask your agent, and point at the source:
+## audit — what your skills already cost you
 
-> turn this book into a skill — ~/books/designing-data-intensive-applications.pdf
+Start here, before you make another one. No API key, no network:
 
-> make a skill from the pytest docs — https://docs.pytest.org/en/stable/
+```bash
+anything-to-skill audit
+```
 
-It will read the source, ask what you want the skill *for* — quick reference,
-a working guide, or deep study — and write the skill at that depth. When a PDF
-page cannot be read as text, it renders that page and reads it as an image
-instead of quietly leaving a hole.
+It finds the skills directories on the machine and grades every skill in them:
 
-## Sources
+```
+wrangler  60 always-loaded / 3225 on trigger / 0 on demand (0 reference file(s))
+  /Users/you/.claude/skills/wrangler/SKILL.md
+    warning: description names the subject but never the situation
+      -> add an explicit trigger — "Use when the user ..." — with the words a
+         user would actually type
+    warning: SKILL.md body is ~3225 tokens against a budget of 2000
+      -> move the lookup material — tables, syntax, command lists — into
+         `references/` and link to it from the body
+
+Across the tree:
+    warning: `sandbox-next` and `sandbox-stable` describe themselves with the
+             same terms (apps, building, changing, cloudflare, default, files,
+             next, package, porting, sandbox, stable, terminals, tunnels)
+      -> make each description say what the other one is *not* for, or merge them
+
+15 skill(s)
+  1026 tokens are loaded in every session before any skill fires
+  heaviest body: turnstile-spin at ~4590 tokens (budget 2000)
+  1 error(s), 10 warning(s)
+```
+
+Three numbers, because they are not paid at the same time. The **description**
+is loaded in every session whether the skill fires or not. The **body** is
+loaded when it fires. **`references/`** is loaded only if the body sends you
+there. A skill that keeps its body small by pushing detail into `references/`
+costs nothing extra until somebody needs it — and one that does not, taxes
+every unrelated task you run that day.
+
+It also catches the failures that are invisible from inside one skill: two
+skills describing themselves with the same words, so routing between them is a
+coin flip; links into `references/` that go nowhere; reference files nothing
+links to. `--strict` fails on warnings, `--json` is for scripts, and both make
+it a CI gate.
+
+## build — a source in, a skill out
+
+```bash
+anything-to-skill build https://docs.pytest.org/en/stable/ --crawl \
+    --purpose working-guide --out ./skills
+```
+
+It reads in two passes — notes on each section, then the skill from the notes —
+so nothing ever has to hold the whole book and the whole answer at once. Then
+it audits what it wrote, because a tool that generates skills and does not
+grade its own output is asking you to trust it twice.
+
+`--purpose` is the choice that changes the result most: `reference` (look it up
+fast), `working-guide` (apply it), or `deep-study` (learn it, reasoning
+included). `--dry-run` prints the plan and makes no requests:
+
+```
+$ anything-to-skill build ./SKILL.md references/*.md --purpose reference --dry-run
+
+building `a2s-docs` for `reference`
+  model     (none — dry run)
+  reading   1 section(s), ~4842 tokens
+  writing   ./skills/a2s-docs
+
+--dry-run: stopping before the first request.
+```
+
+`build` needs `ANTHROPIC_API_KEY`. Nothing else here does.
+
+## eval — does the skill still know the book?
+
+```bash
+anything-to-skill eval ./skills/ddia --questions 12
+```
+
+Every other skill tool grades a skill against itself: it asks a model whether
+the skill looks good. That test cannot fail for the right reason, because
+nothing in it knows what the skill was supposed to contain.
+
+This one has the source. The questions come from the source, the skill answers
+with nothing but itself, and the answers are graded against the source. The
+pass rate is the headline and the failures are the point — each names the
+section its question came from, so the report ends with the parts of the book
+the skill did not carry. `--min-pass 80` exits non-zero below that.
+
+## refresh — documentation moves
+
+A skill built from a docs site is a snapshot of something that changes.
+`build` records what it read in `.a2s.lock`, so this can be answered later:
+
+```
+$ anything-to-skill refresh ./skills/pytest --check
+
+the sources moved since 2026-08-01T09:14:00Z (2274 -> 2684 tokens)
+  changed: https://docs.pytest.org/en/stable/how-to/fixtures.html
+```
+
+`--check` changes nothing and exits 1 when the source moved — a scheduled job
+that opens a pull request. Without it, the skill is rebuilt and the change is
+written to the skill's own `CHANGELOG.md`. Every document carries its own
+fingerprint, so the report names the pages that moved rather than only telling
+you that something did.
+
+---
+
+## extract — the reading, on its own
+
+Point your agent at a source and it gets text back, not a page of markup with
+the documentation buried in it:
+
+````
+# Installation - The Rust Programming Language
+
+source: https://doc.rust-lang.org/book/ch01-01-installation.html
+
+The first step is to install Rust. We'll download Rust through rustup, a
+command line tool for managing Rust versions and associated tools. [...]
+
+```
+$ curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf | sh
+```
+````
+
+The navigation, the sidebar, the version switcher and the footer are gone. The
+code block kept its indentation. The page says where it came from — a crawl
+concatenates dozens of pages, and a claim you cannot trace is a claim you
+cannot check.
 
 | | |
 |---|---|
@@ -100,9 +197,6 @@ instead of quietly leaving a hole.
 | **A page or a paper** | `anything-to-skill extract https://arxiv.org/pdf/2501.00001` |
 | **A documentation site** | `anything-to-skill extract https://docs.example.com/guide/ --crawl` |
 | **A repository** | `anything-to-skill extract owner/repo` |
-
-Run `anything-to-skill sources` for every accepted form — SSH remotes, `tree`
-and `blob` URLs, branches, subdirectories.
 
 **Sites** are crawled one request at a time, on the same host, at or below the
 directory you named, bounded by `--max-pages` and `--depth`, and `robots.txt` is
@@ -127,6 +221,9 @@ screen: a crawl that stopped at its page limit, pages `robots.txt` withheld, PDF
 pages with no extractable text. A skill whose gaps are stated is usable; one
 that hides them is a trap for whoever loads it next.
 
+Run `anything-to-skill sources` for every accepted form — SSH remotes, `tree`
+and `blob` URLs, branches, subdirectories.
+
 ## Formats
 
 | | |
@@ -140,8 +237,22 @@ that hides them is a trap for whoever loads it next.
 Repositories need [git](https://git-scm.com/downloads). Kindle (MOBI · AZW ·
 AZW3) needs [Calibre](https://calibre-ebook.com/download). PDFs come out better
 with [poppler](https://poppler.freedesktop.org/) installed (`brew install
-poppler`) — run `anything-to-skill check` to see what you have.
+poppler`), and `--engine docling` hands them to
+[Docling](https://github.com/docling-project/docling) instead when a document's
+tables matter more than the time. Run `anything-to-skill check` to see what you
+have.
+
+## Agents without a shell
+
+```bash
+anything-to-skill mcp
+```
+
+Serves `extract`, `read_text`, `audit` and `sources` over MCP on stdio, so an
+agent that cannot run a command can still read a source and grade a skill.
+`build` and `eval` are deliberately absent: an agent on the other end of MCP
+already is the model.
 
 ---
 
-[SKILL.md](SKILL.md) · [CONTRIBUTING.md](CONTRIBUTING.md) · [SECURITY.md](SECURITY.md) · Apache-2.0
+[SKILL.md](SKILL.md) · [commands](references/commands.md) · [CONTRIBUTING.md](CONTRIBUTING.md) · [SECURITY.md](SECURITY.md) · Apache-2.0

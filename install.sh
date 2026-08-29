@@ -207,6 +207,13 @@ if [ "${SKILL:-0}" = "1" ]; then
     # user keeps in there is theirs, and an installer should not eat it.
     cp "$tmp/$name/SKILL.md" "$skill_dest/SKILL.md" || die "could not write $skill_dest/SKILL.md"
     cp "$tmp/$name/LICENSE" "$skill_dest/LICENSE"   || die "could not write $skill_dest/LICENSE"
+    # SKILL.md is a map and references/ is what it points at. Installing one
+    # without the other leaves every link in the skill going nowhere.
+    if [ -d "$tmp/$name/references" ]; then
+        rm -rf "$skill_dest/references"
+        cp -R "$tmp/$name/references" "$skill_dest/references" \
+            || die "could not write $skill_dest/references"
+    fi
 
     say ""
     say "Installed the skill to $skill_dest"

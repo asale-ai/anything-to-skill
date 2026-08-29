@@ -44,16 +44,37 @@ impl Extraction {
     }
 }
 
+/// Which reader handles the formats that have more than one.
+///
+/// The built-in path is the one this tool ships and tests. Docling is an
+/// external application with a research-grade table model behind it: slower,
+/// heavier, and better on the documents where layout carries meaning. Offering
+/// it is cheaper and more honest than trying to catch up with it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, clap::ValueEnum)]
+pub enum Engine {
+    /// Every parser compiled into this binary. Needs nothing installed.
+    #[default]
+    Builtin,
+    /// Shell out to `docling`, when it is on PATH.
+    Docling,
+}
+
+/// The formats worth handing to Docling. Plain text through Docling would be a
+/// subprocess and a temporary file to accomplish `read_to_string`.
+const DOCLING_EXTENSIONS: &[&str] = &[
+    "pdf", "docx", "pptx", "xlsx", "html", "htm", "xhtml", "adoc", "asciidoc",
+];
+
 /// Extract text from one document, whatever kind of source produced it.
-pub fn extract_doc(doc: &Doc) -> Result<Extraction> {
+pub fn extract_doc(doc: &Doc, engine: Engine) -> Result<Extraction> {
     match &doc.payload {
-        Payload::File(path) => extract(path),
+        Payload::File(path) => extract_with(path, engine),
         Payload::Text { text, method } => Ok(Extraction::plain(text.clone(), method)),
     }
 }
 
 /// Extract text from one file, dispatching on its extension.
-pub fn extract(path: &Path) -> Result<Extraction> {
+pub fn extract_with(path: &Path, engine: Engine) -> Result<Extraction> {
     let ext = path
         .extension()
         .and_then(|e| e.to_str())
@@ -66,6 +87,10 @@ pub fn extract(path: &Path) -> Result<Extraction> {
             crate::config::supported_extensions().join(", ")
         )
     })?;
+
+    if engine == Engine::Docling && DOCLING_EXTENSIONS.contains(&ext.as_str()) {
+        return docling(path);
+    }
 
     match route {
         Route::Pdf => pdf::extract(path),
@@ -132,6 +157,74 @@ fn calibre(path: &Path) -> Result<Extraction> {
     Ok(Extraction::plain(text, "calibre"))
 }
 
+/// Convert a document with Docling.
+///
+/// Docling writes its output as a file next to the name it was given, and the
+/// naming has changed between versions — so the file is found rather than
+/// predicted. Anything else is a guess that breaks on an upgrade.
+fn docling(path: &Path) -> Result<Extraction> {
+    if which("docling").is_none() {
+        bail!(
+            "--engine docling needs `docling` on PATH, and it is not there.\n\
+             Install it with `pip install docling`, or drop the flag to use the\n\
+             built-in readers, which need nothing installed."
+        );
+    }
+    let out_dir =
+        std::env::temp_dir().join(format!("anything-to-skill-docling-{}", std::process::id()));
+    // A stale directory from an earlier run would let its output be picked up
+    // as if it belonged to this file.
+    let _ = std::fs::remove_dir_all(&out_dir);
+    std::fs::create_dir_all(&out_dir).context("creating the Docling scratch directory")?;
+
+    let result = Command::new("docling")
+        .arg(path)
+        .arg("--to")
+        .arg("md")
+        .arg("--output")
+        .arg(&out_dir)
+        .output()
+        .context("running docling")?;
+    if !result.status.success() {
+        let _ = std::fs::remove_dir_all(&out_dir);
+        bail!(
+            "docling failed on {}: {}",
+            path.display(),
+            String::from_utf8_lossy(&result.stderr).trim()
+        );
+    }
+
+    let produced = newest_markdown(&out_dir);
+    let outcome = match produced {
+        Some(file) => read_text(&file).map(|text| Extraction::plain(text, "docling")),
+        None => Err(anyhow::anyhow!(
+            "docling wrote no Markdown for {} — it exited cleanly with nothing to show",
+            path.display()
+        )),
+    };
+    let _ = std::fs::remove_dir_all(&out_dir);
+    outcome
+}
+
+/// The Markdown file Docling just wrote, whatever it decided to call it.
+fn newest_markdown(dir: &Path) -> Option<std::path::PathBuf> {
+    let mut best: Option<(std::time::SystemTime, std::path::PathBuf)> = None;
+    for entry in std::fs::read_dir(dir).ok()?.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("md") {
+            continue;
+        }
+        let modified = entry
+            .metadata()
+            .and_then(|m| m.modified())
+            .unwrap_or(std::time::UNIX_EPOCH);
+        if best.as_ref().is_none_or(|(when, _)| modified >= *when) {
+            best = Some((modified, path));
+        }
+    }
+    best.map(|(_, path)| path)
+}
+
 /// Locate an executable on PATH.
 pub fn which(program: &str) -> Option<std::path::PathBuf> {
     std::env::var_os("PATH").and_then(|paths| {
@@ -147,8 +240,44 @@ mod tests {
     use super::*;
 
     #[test]
+    fn docling_only_claims_the_formats_it_is_better_at() {
+        assert!(DOCLING_EXTENSIONS.contains(&"pdf"));
+        assert!(DOCLING_EXTENSIONS.contains(&"docx"));
+        // Plain text through a subprocess would be slower and no more accurate.
+        assert!(!DOCLING_EXTENSIONS.contains(&"txt"));
+        assert!(!DOCLING_EXTENSIONS.contains(&"md"));
+        assert!(!DOCLING_EXTENSIONS.contains(&"epub"));
+    }
+
+    #[test]
+    fn the_newest_markdown_is_the_one_just_written() {
+        let dir = std::env::temp_dir().join(format!("a2s-docling-pick-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("notes.txt"), "not markdown").unwrap();
+        assert!(newest_markdown(&dir).is_none());
+        std::fs::write(dir.join("out.md"), "# hi").unwrap();
+        assert_eq!(
+            newest_markdown(&dir).unwrap().file_name().unwrap(),
+            "out.md"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn docling_says_how_to_install_it_when_it_is_missing() {
+        if which("docling").is_some() {
+            return; // Nothing to assert on a machine that has it.
+        }
+        let err = docling(Path::new("/tmp/whatever.pdf"))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("pip install docling"), "{err}");
+    }
+
+    #[test]
     fn unsupported_extension_names_the_alternatives() {
-        let err = extract(Path::new("/tmp/whatever.xyz"))
+        let err = extract_with(Path::new("/tmp/whatever.xyz"), Engine::Builtin)
             .unwrap_err()
             .to_string();
         assert!(err.contains("unsupported format"), "{err}");
