@@ -42,6 +42,31 @@ jobs:
           }
           Write-Host "install.ps1 parses clean"
 
+      # The POSIX installer is run the same way, and it has one behaviour that
+      # has to hold without a network: --help prints the usage and exits. It
+      # used to ignore its arguments entirely, so `install.sh --help` started a
+      # real download and hung wherever there was nothing to download from.
+      - name: POSIX installer parses, and --help does not install
+        run: |
+          set -eu
+          for shell in sh dash bash; do
+              command -v "$shell" >/dev/null 2>&1 || continue
+              "$shell" -n install.sh
+              echo "install.sh parses under $shell"
+          done
+
+          help=$(sh install.sh --help)
+          case "$help" in
+              *--skill-dir*) echo "install.sh --help prints the usage" ;;
+              *) echo "install.sh --help printed no usage"; exit 1 ;;
+          esac
+
+          if sh install.sh --not-a-real-flag >/dev/null 2>&1; then
+              echo "install.sh accepted an unknown option"
+              exit 1
+          fi
+          echo "install.sh rejects unknown options"
+
   # The npm launcher is how most people will run this, and it is JavaScript in
   # a Rust repository — nothing else in CI would ever look at it. None of this
   # needs the network: downloading the binary needs a published release, which
