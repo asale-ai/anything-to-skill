@@ -42,6 +42,57 @@ jobs:
           }
           Write-Host "install.ps1 parses clean"
 
+  # The npm launcher is how most people will run this, and it is JavaScript in
+  # a Rust repository — nothing else in CI would ever look at it. None of this
+  # needs the network: downloading the binary needs a published release, which
+  # by definition does not exist for the commit under test.
+  npm:
+    name: npm launcher
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Every file parses
+        run: |
+          set -euo pipefail
+          for file in npm/bin/*.js npm/lib/*.js; do
+            node --check "$file"
+          done
+
+      - name: The package version tracks the crate
+        run: |
+          set -euo pipefail
+          crate=$(awk '/^\[/ { p = ($0 == "[package]") } p && /^version[[:space:]]*=/ && !d { gsub(/^version[[:space:]]*=[[:space:]]*"|"[[:space:]]*$/, ""); print; d = 1 }' Cargo.toml)
+          pkg=$(node -p "require('./npm/package.json').version")
+          echo "crate=$crate npm=$pkg"
+          # The launcher downloads the GitHub release for its own version, so a
+          # mismatch fetches the wrong binary or a tag that does not exist.
+          test "$crate" = "$pkg"
+
+      - name: Platform mapping and proxy resolution
+        run: |
+          set -euo pipefail
+          node --test npm/test/*.test.js
+
+      - name: The tarball carries the launcher and nothing else
+        run: |
+          set -euo pipefail
+          cp LICENSE npm/LICENSE
+          ( cd npm && npm pack --dry-run --json ) > pack.json
+          node -e "
+          const files = require('./pack.json')[0].files.map(f => f.path).sort();
+          const expected = ['LICENSE','README.md','bin/anything-to-skill.js','lib/download.js','lib/http.js','lib/install.js','lib/platform.js','package.json'];
+          const missing = expected.filter(f => !files.includes(f));
+          if (missing.length) { console.error('missing from the tarball:', missing); process.exit(1); }
+          // vendor/ is the downloaded binary — it must never be published.
+          const leaked = files.filter(f => f.startsWith('vendor/') || f.startsWith('test/'));
+          if (leaked.length) { console.error('should not ship:', leaked); process.exit(1); }
+          console.log('ok:', files.join(', '));
+          "
+
   test:
     name: Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

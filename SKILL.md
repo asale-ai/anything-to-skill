@@ -2,7 +2,7 @@
 name: anything-to-skill
 description: Turn a book, paper, document, documentation site, or code repository into an agent skill, and keep it honest afterwards — grade a skill's load cost and routability, test it against the source it came from, and rebuild it when the source moves. Use when the user wants to make a skill from a PDF, EPUB, DOCX, a URL, a docs site, or a GitHub repo — "make a skill from this book", "turn these docs into a skill", "I want an agent that knows this library" — or when they ask why their skills are slow, bloated, never firing, or out of date.
 license: Apache-2.0
-compatibility: Needs the anything-to-skill CLI. `mcp` mode serves the reading and grading tools to agents with no shell. `build` and `eval` need ANTHROPIC_API_KEY; every other command needs no key. Web and repository sources need network access; repositories also need git. poppler improves table fidelity and is required to render pages as images; Calibre is required only for Kindle formats.
+compatibility: Needs the anything-to-skill CLI, reachable as `anything-to-skill` on PATH or as `npx -y @asale/anything-to-skill`. `mcp` mode serves the reading and grading tools to agents with no shell. `build` and `eval` need ANTHROPIC_API_KEY; every other command needs no key. Web and repository sources need network access; repositories also need git. poppler improves table fidelity and is required to render pages as images; Calibre is required only for Kindle formats.
 ---
 
 # Anything to Skill
@@ -15,19 +15,30 @@ Do not re-do the CLI's job by hand, and do not let it do yours.
 
 ---
 
-## Step 0 — Confirm the tool is available
+## Step 0 — Find the tool
 
 ```bash
 anything-to-skill --version
+```
+
+If that fails, it is not on PATH. Try it through npm instead:
+
+```bash
+npx -y @asale/anything-to-skill --version
+```
+
+If that works, **use `npx -y @asale/anything-to-skill` in place of
+`anything-to-skill` for every command below** — the first run downloads the
+binary, later ones are immediate. Offer the user the shorter path:
+
+```bash
+npm install -g @asale/anything-to-skill
+```
+
+If neither works, say so and stop; there is nothing to fall back on. Then:
+
+```bash
 anything-to-skill check        # optional external tools
-```
-
-If the first fails, the CLI is not installed. Tell the user and stop — there is
-no fallback path:
-
-```
-cargo install anything-to-skill
-# or a release binary: https://github.com/asale-ai/anything-to-skill/releases
 ```
 
 Nothing `check` reports as missing blocks an ordinary PDF, EPUB, URL or site.

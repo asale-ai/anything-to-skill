@@ -23,22 +23,40 @@ one when you care about the result.
 
 ## Install
 
-The skill, into every agent tool on the machine:
+```bash
+npx @asale/anything-to-skill audit
+```
+
+That is the whole install. `npx` fetches a small launcher; the launcher fetches
+the binary for your platform out of this project's GitHub release, checks it
+against the release's published SHA256, and refuses to unpack anything that
+does not match. `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY` are honoured.
+
+Fetching it on every run gets old, so keep it:
+
+```bash
+npm install -g @asale/anything-to-skill
+```
+
+The skill itself — the instructions your agent loads — goes in separately, into
+every agent tool on the machine:
 
 ```bash
 npx skills add asale-ai/anything-to-skill --all -g
 ```
 
 That writes `~/.agents/skills/anything-to-skill/` — the path Codex, Cursor,
-Gemini CLI, and opencode read directly — and symlinks it into the ones that look
-elsewhere, Claude Code's `~/.claude/skills/` among them. Drop `-g` to install
-into the current project instead.
+Gemini CLI, and opencode read directly — and symlinks it into the ones that
+look elsewhere, Claude Code's `~/.claude/skills/` among them. Drop `-g` to
+install into the current project instead.
 
-The skill drives a small binary that does the work:
+<details>
+<summary><strong>Without Node</strong></summary>
+
+The npm package needs Node 18 or later. On a machine without it:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/asale-ai/anything-to-skill/main/install.sh | sh
-# or, if you have Rust: cargo install anything-to-skill
 ```
 
 On Windows, in PowerShell:
@@ -47,14 +65,17 @@ On Windows, in PowerShell:
 irm https://raw.githubusercontent.com/asale-ai/anything-to-skill/main/install.ps1 | iex
 ```
 
-No Node on the machine? Pipe to `SKILL=1 sh` instead — or set `$env:SKILL = '1'`
-before the PowerShell line — and the installer places the skill itself, out of
-the release archive it has already verified.
+Pipe to `SKILL=1 sh` instead — or set `$env:SKILL = '1'` before the PowerShell
+line — and the installer places the skill as well as the binary. Both verify
+the download against the release's published SHA256 and install nothing if it
+does not match. Set `BIN_DIR` (`$env:BIN_DIR`) to install somewhere other than
+`~/.local/bin`; `$env:ADD_TO_PATH = '1'` puts that directory on your PATH on
+Windows.
 
-Both installers verify the download against the release's published SHA256 and
-install nothing if it does not match. Set `BIN_DIR` (`$env:BIN_DIR`) to install
-somewhere other than `~/.local/bin`; `$env:ADD_TO_PATH = '1'` puts that
-directory on your PATH on Windows.
+With Rust already installed, `cargo install anything-to-skill` builds it from
+source.
+
+</details>
 
 ---
 

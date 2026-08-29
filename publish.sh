@@ -25,10 +25,11 @@
 # with the version bump, so the tag covers exactly what was tested. Everything
 # going into that commit is listed as it happens.
 #
-# The release has four destinations and this script does them in dependency
+# The release has five destinations and this script does them in dependency
 # order: the git tag drives the GitHub Actions build that produces the binaries
-# install.sh downloads, so the tag has to land before anything advertises the
-# new version. Publishing is not reversible — crates.io only allows yanking —
+# install.sh downloads and the npm package fetches on install, so the tag has to
+# land — and the build has to finish — before anything advertises the new
+# version. Publishing is not reversible — crates.io only allows yanking —
 # so everything that can fail is made to fail before the first push.
 
 set -euo pipefail
@@ -37,6 +38,8 @@ REPO_SLUG="asale-ai/anything-to-skill"
 CRATE="anything-to-skill"
 SKILL_SLUG="anything-to-skill"
 SKILL_OWNER="asale-ai"
+NPM_PKG="@asale/anything-to-skill"
+NPM_DIR="npm"
 MAIN_BRANCH="main"
 WAIT_TIMEOUT=1500   # seconds to wait for the release build (25 minutes)
 
@@ -123,11 +126,16 @@ if [ -n "${CARGO_REGISTRY_TOKEN:-}" ]; then
     export CARGO_REGISTRIES_CRATES_IO_TOKEN="${CARGO_REGISTRIES_CRATES_IO_TOKEN:-$CARGO_REGISTRY_TOKEN}"
 fi
 
+# npm. NPM_TOKEN is what .env is expected to carry; the other two are what CI
+# and the wider ecosystem call the same thing, and accepting all three costs
+# nothing.
+NPM_AUTH_TOKEN="${NPM_TOKEN:-${NPM_API_KEY:-${NODE_AUTH_TOKEN:-}}}"
+
 # ---------------------------------------------------------------- preflight ---
 
 step "Preflight"
 
-for tool in git cargo clawhub curl sed awk; do
+for tool in git cargo clawhub npm curl sed awk; do
     command -v "$tool" >/dev/null 2>&1 || die "this script needs '$tool', which was not found"
 done
 if [ "$WAIT_FOR_BUILD" = 1 ]; then
@@ -169,6 +177,44 @@ fi
 clawhub whoami >/dev/null 2>&1 \
     || die "clawhub is not authenticated. Run 'clawhub login' (or set CLAWHUB_API_KEY in .env)."
 info "clawhub user: $(clawhub whoami 2>/dev/null | tail -1)"
+
+[ -n "$NPM_AUTH_TOKEN" ] \
+    || die "no npm token. Put NPM_TOKEN in .env (an npm automation token with
+publish rights for the @asale scope), or export NODE_AUTH_TOKEN."
+[ -f "$NPM_DIR/package.json" ] \
+    || die "$NPM_DIR/package.json is missing — the npm launcher is part of the release."
+
+# The token is written to a config file of our own rather than the user's
+# ~/.npmrc: a release script has no business editing the machine's npm login,
+# and a file we create is a file we can guarantee is deleted.
+#
+# It pins the registry for the same reason the cargo steps pass
+# --registry crates-io: a machine with a mirror configured — registry.npmmirror.com
+# is a common one — would otherwise have `npm publish` push the release
+# somewhere that is not npm, and `npm view` answer "no such version" about a
+# registry nobody installs from.
+NPM_REGISTRY="https://registry.npmjs.org/"
+NPM_CONFIG_FILE="$(mktemp)"
+chmod 600 "$NPM_CONFIG_FILE"
+printf 'registry=%s\n//registry.npmjs.org/:_authToken=%s\nalways-auth=true\n' \
+    "$NPM_REGISTRY" "$NPM_AUTH_TOKEN" > "$NPM_CONFIG_FILE"
+
+# Every later trap replaces this one, so each of them has to call this too. A
+# token left in /tmp because the release failed is the worst kind of leak: the
+# one nobody goes looking for.
+cleanup_npmrc() {
+    [ -n "${NPM_CONFIG_FILE:-}" ] && rm -f "$NPM_CONFIG_FILE"
+    return 0
+}
+trap 'cleanup_npmrc' EXIT
+
+npm_run() { ( cd "$NPM_DIR" && npm --userconfig "$NPM_CONFIG_FILE" "$@" ); }
+
+npm_whoami="$(npm_run whoami 2>/dev/null || true)"
+[ -n "$npm_whoami" ] \
+    || die "the npm token was rejected. Check NPM_TOKEN in .env — it must be a
+current automation token for an account that can publish to @asale."
+info "npm user: $npm_whoami"
 
 # ----------------------------------------------------------------- version ---
 
@@ -219,9 +265,13 @@ case "$published" in
         die "$CRATE $version is already on crates.io. Versions cannot be replaced — pick another." ;;
 esac
 
+if npm_run view "$NPM_PKG@$version" version >/dev/null 2>&1; then
+    die "$NPM_PKG@$version is already on npm. Versions cannot be replaced — pick another."
+fi
+
 # ------------------------------------------------------------------- write ---
 
-step "Bumping Cargo.toml"
+step "Bumping Cargo.toml and package.json"
 
 # Keep byte-for-byte copies to roll back to. `git checkout` would be wrong here:
 # the tree is allowed to carry uncommitted work, and checkout would throw away
@@ -229,11 +279,16 @@ step "Bumping Cargo.toml"
 backup_dir="$(mktemp -d)"
 cp Cargo.toml "$backup_dir/Cargo.toml"
 [ -f Cargo.lock ] && cp Cargo.lock "$backup_dir/Cargo.lock"
+cp "$NPM_DIR/package.json" "$backup_dir/package.json"
 
 restore_tree() {
     cp "$backup_dir/Cargo.toml" Cargo.toml 2>/dev/null || true
     [ -f "$backup_dir/Cargo.lock" ] && cp "$backup_dir/Cargo.lock" Cargo.lock 2>/dev/null
+    cp "$backup_dir/package.json" "$NPM_DIR/package.json" 2>/dev/null || true
+    # Copied in for packing, not checked in.
+    rm -f "$NPM_DIR/LICENSE"
     rm -rf "$backup_dir"
+    cleanup_npmrc
     return 0
 }
 # Armed before the lockfile sync, because that is the first thing that can fail
@@ -265,7 +320,21 @@ written="$(awk '
 cargo check --quiet --offline >/dev/null 2>&1 \
     || cargo check --quiet >/dev/null \
     || die "cargo check failed, so Cargo.lock could not be brought up to date"
-info "Cargo.toml and Cargo.lock now say $version"
+# npm's own `version` command would tag and commit; this only edits the field.
+# The package version is not merely cosmetic — the launcher downloads the
+# GitHub release for its own version, so a mismatch fetches the wrong binary or
+# a tag that does not exist.
+npm_run pkg set "version=$version" >/dev/null \
+    || die "could not set the version in $NPM_DIR/package.json"
+npm_written="$(npm_run pkg get version | tr -d '"')"
+[ "$npm_written" = "$version" ] \
+    || die "the npm version bump did not apply — package.json still reads '$npm_written'"
+
+# The package's `files` list names LICENSE, and there is one licence in this
+# repository rather than a copy per package directory.
+cp LICENSE "$NPM_DIR/LICENSE"
+
+info "Cargo.toml, Cargo.lock and $NPM_DIR/package.json now say $version"
 
 # ------------------------------------------------------------------- gates ---
 
@@ -288,6 +357,9 @@ info "cargo publish --dry-run"
 # naming the registry is harmless when no replacement is set up.
 cargo publish --registry crates-io --dry-run --allow-dirty --quiet \
     || die "cargo publish --dry-run failed"
+info "npm publish --dry-run"
+npm_run publish --dry-run --access public >/dev/null \
+    || die "npm publish --dry-run failed"
 info "clawhub publish --dry-run"
 clawhub publish . --slug "$SKILL_SLUG" --owner "$SKILL_OWNER" --version "$version" --dry-run \
     || die "clawhub publish --dry-run failed"
@@ -321,7 +393,8 @@ $(printf '%s\n' "$changes" | sed 's/^/      /')
          (the tag starts the GitHub Actions build that produces the binaries
           install.sh downloads)
       3. publish $CRATE $version to crates.io      ${DIM}— cannot be undone, only yanked${RESET}
-      4. publish the skill to ClawHub as $SKILL_OWNER/$SKILL_SLUG@$version
+      4. publish $NPM_PKG@$version to npm          ${DIM}— after the binaries exist, which it downloads${RESET}
+      5. publish the skill to ClawHub as $SKILL_OWNER/$SKILL_SLUG@$version
 EOF
 
 step "Committing and tagging"
@@ -334,7 +407,7 @@ info "committed $(git rev-parse --short HEAD), tagged $tag"
 rm -rf "$backup_dir"
 
 # From here a failure leaves real state behind, so the trap explains where.
-trap 'printf "\n%serror:%s the release stopped partway through.\n  Local commit and tag %s exist.\n  To undo (only safe if nothing was pushed):\n    git tag -d %s && git reset --hard HEAD~1\n" "$RED" "$RESET" "$tag" "$tag" >&2' EXIT
+trap 'cleanup_npmrc; printf "\n%serror:%s the release stopped partway through.\n  Local commit and tag %s exist.\n  To undo (only safe if nothing was pushed):\n    git tag -d %s && git reset --hard HEAD~1\n" "$RED" "$RESET" "$tag" "$tag" >&2' EXIT
 
 step "Pushing"
 git push --quiet origin "$MAIN_BRANCH"
@@ -342,7 +415,7 @@ git push --quiet origin "$tag"
 info "pushed $MAIN_BRANCH and $tag"
 info "release build: https://github.com/$REPO_SLUG/actions/workflows/release.yml"
 
-trap 'printf "\n%serror:%s the release stopped after pushing %s.\n  The tag is public and the GitHub build may already have run.\n  Re-run the remaining steps by hand, or release %s next.\n" "$RED" "$RESET" "$tag" "$tag" >&2' EXIT
+trap 'cleanup_npmrc; printf "\n%serror:%s the release stopped after pushing %s.\n  The tag is public and the GitHub build may already have run.\n  Re-run the remaining steps by hand, or release %s next.\n" "$RED" "$RESET" "$tag" "$tag" >&2' EXIT
 
 step "Publishing to crates.io"
 cargo publish --registry crates-io --quiet \
@@ -371,6 +444,16 @@ if [ "$WAIT_FOR_BUILD" = 1 ]; then
     done
 fi
 
+# npm goes after the wait and not before it. The published package downloads
+# the GitHub release for its own version on install, so publishing it while the
+# build is still running would ship a version that cannot install itself.
+step "Publishing $NPM_PKG to npm"
+npm_run publish --access public \
+    || die "npm publish failed. Everything before it shipped; retry with:
+  ( cd $NPM_DIR && npm publish --access public )"
+info "$NPM_PKG@$version is on npm"
+rm -f "$NPM_DIR/LICENSE"
+
 step "Publishing the skill to ClawHub"
 clawhub publish . \
     --slug "$SKILL_SLUG" \
@@ -384,14 +467,16 @@ clawhub publish . \
     || die "clawhub publish failed. Everything else shipped; retry with:
   clawhub publish . --slug $SKILL_SLUG --owner $SKILL_OWNER --version $version"
 
+cleanup_npmrc
 trap - EXIT
 
 step "Released $CRATE $version"
 cat <<EOF
     crates.io  https://crates.io/crates/$CRATE/$version
+    npm        https://www.npmjs.com/package/$NPM_PKG/v/$version
     release    https://github.com/$REPO_SLUG/releases/tag/$tag
     skill      clawhub install @$SKILL_OWNER/$SKILL_SLUG
 
-    Verify the installer picks it up:
-      curl -fsSL https://raw.githubusercontent.com/$REPO_SLUG/main/install.sh | sh
+    Verify it installs the way the README says it does:
+      npx -y $NPM_PKG@$version --version
 EOF

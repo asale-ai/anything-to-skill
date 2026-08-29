@@ -149,3 +149,9 @@ samples/
 
 # macOS
 .DS_Store
+
+# The npm launcher fetches the binary at install time; the download and the
+# licence copied in at publish time are both build output, not source.
+npm/vendor/
+npm/LICENSE
+npm/*.tgz

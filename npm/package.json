@@ -1,0 +1,46 @@
+{
+  "name": "@asale/anything-to-skill",
+  "version": "0.3.0",
+  "description": "Turn books, documents, documentation sites and repositories into agent skills — and grade, test and refresh the skills you already have",
+  "keywords": [
+    "agent-skills",
+    "claude-code",
+    "skill-generator",
+    "pdf",
+    "epub",
+    "documentation",
+    "cli"
+  ],
+  "homepage": "https://github.com/asale-ai/anything-to-skill#readme",
+  "bugs": "https://github.com/asale-ai/anything-to-skill/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/asale-ai/anything-to-skill.git"
+  },
+  "license": "Apache-2.0",
+  "type": "commonjs",
+  "bin": {
+    "anything-to-skill": "bin/anything-to-skill.js"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "postinstall": "node lib/install.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ]
+}
